@@ -7,9 +7,14 @@ import GhosttyKit
 /// SwiftUI wrapper that embeds the live Ghostty surface.
 public struct TermBridgeKitSurfaceView: NSViewRepresentable {
     private let controller: TermBridgeKitTerminalController?
+    private let showsSystemKeyboard: Bool
 
-    public init(controller: TermBridgeKitTerminalController? = nil) {
+    public init(
+        controller: TermBridgeKitTerminalController? = nil,
+        showsSystemKeyboard: Bool = true
+    ) {
         self.controller = controller
+        self.showsSystemKeyboard = showsSystemKeyboard
     }
 
     public func makeNSView(context: Context) -> SurfaceContainerView {

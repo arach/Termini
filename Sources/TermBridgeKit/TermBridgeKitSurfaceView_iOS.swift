@@ -7,18 +7,25 @@ import GhosttyKit
 /// SwiftUI wrapper that embeds the live Ghostty surface on iOS.
 public struct TermBridgeKitSurfaceView: UIViewRepresentable {
     private let controller: TermBridgeKitTerminalController?
+    private let showsSystemKeyboard: Bool
 
-    public init(controller: TermBridgeKitTerminalController? = nil) {
+    public init(
+        controller: TermBridgeKitTerminalController? = nil,
+        showsSystemKeyboard: Bool = true
+    ) {
         self.controller = controller
+        self.showsSystemKeyboard = showsSystemKeyboard
     }
 
     public func makeUIView(context: Context) -> SurfaceContainerView {
         let view = SurfaceContainerView(runtime: .shared)
+        view.showsSystemKeyboard = showsSystemKeyboard
         view.bind(controller: controller)
         return view
     }
 
     public func updateUIView(_ uiView: SurfaceContainerView, context: Context) {
+        uiView.showsSystemKeyboard = showsSystemKeyboard
         uiView.bind(controller: controller)
     }
 }
@@ -30,6 +37,7 @@ public final class SurfaceContainerView: UIView, UIKeyInput, UITextInputTraits {
     private var renderLink: CADisplayLink?
     private weak var controller: TermBridgeKitTerminalController?
     private var lastReportedSize: TermBridgeKitTerminalSize?
+    private lazy var suppressedInputView = UIView(frame: .zero)
 
     public var keyboardType: UIKeyboardType = .asciiCapable
     public var autocorrectionType: UITextAutocorrectionType = .no
@@ -39,8 +47,18 @@ public final class SurfaceContainerView: UIView, UIKeyInput, UITextInputTraits {
     public var smartDashesType: UITextSmartDashesType = .no
     public var smartInsertDeleteType: UITextSmartInsertDeleteType = .no
     public var enablesReturnKeyAutomatically: Bool = false
+    public var showsSystemKeyboard = true {
+        didSet {
+            guard oldValue != showsSystemKeyboard else { return }
+            reloadInputViews()
+        }
+    }
 
     public var hasText: Bool { true }
+
+    public override var inputView: UIView? {
+        showsSystemKeyboard ? nil : suppressedInputView
+    }
 
     public override class var layerClass: AnyClass {
         CAMetalLayer.self
