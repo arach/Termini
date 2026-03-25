@@ -1,0 +1,28 @@
+name: TermBridgeKitDemos
+options:
+  minimumXcodeGenVersion: 2.38.0
+packages:
+  TermBridgeKit:
+    path: .
+targets:
+  TermBridgeKitIOSDemo:
+    type: application
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources:
+      - path: Examples/TermBridgeKitIOSDemo
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.arach.TermBridgeKitIOSDemo
+        PRODUCT_NAME: TermBridgeKitIOSDemo
+        SWIFT_VERSION: 5.9
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents: YES
+        TARGETED_DEVICE_FAMILY: "1,2"
+        SUPPORTS_MACCATALYST: NO
+        CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_TEAM: 2U83JFPW66
+    dependencies:
+      - package: TermBridgeKit
+        product: TermBridgeKit
