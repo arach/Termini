@@ -18,51 +18,184 @@ This repo does not ship Ghostty binaries. Build `GhosttyKit.xcframework` from th
 ./scripts/install-ghosttykit.sh /path/to/GhosttyKit.xcframework
 ```
 
-The script just copies the framework into `vendor/ghostty/macos`.
+The script copies the framework into `vendor/ghostty/macos`.
 
-## Usage
-Add TermBridgeKit via SPM or as a local checkout, then render the view:
+## Architecture
+
+```
+TermBridgeKitTerminalView          SwiftUI view — wraps the Ghostty surface
+TermBridgeKitTerminalController    Bridge between the view and your transport layer
+TermBridgeKitSSHWorkspace          @Observable state machine — manages a full SSH session lifecycle
+TermBridgeKitSSHSession            Low-level NIOSSH client wired to the controller
+TermBridgeKitConnectionConfig      Validated SSH connection form model
+TermBridgeKitConnectionGuide       Structured in-app setup guide content
+```
+
+## Quickstart — SSH workspace (recommended)
+
+`TermBridgeKitSSHWorkspace` is the primary integration point. It owns the
+controller, the session, and all connection state.
 
 ```swift
 import SwiftUI
 import TermBridgeKit
 
-struct TerminalPane: View {
-    @State private var controller = TermBridgeKitTerminalController()
+struct ContentView: View {
+    @State private var workspace = TermBridgeKitSSHWorkspace(
+        connection: .init(startupCommand: "tmux new -A -s myapp")
+    )
 
     var body: some View {
-        TermBridgeKitTerminalView(controller: controller)
-            .frame(minWidth: 600, minHeight: 400)
+        VStack {
+            TermBridgeKitTerminalView(controller: workspace.controller)
+
+            Button(workspace.isConnected ? "Disconnect" : "Connect") {
+                Task { await workspace.toggleConnection() }
+            }
+            .disabled(!workspace.isConnected && !workspace.canConnect)
+        }
+        .task {
+            // Optionally preload from environment variables and auto-connect
+            if workspace.loadEnvironmentConfigurationIfAvailable() {
+                await workspace.connect()
+            }
+        }
     }
 }
 ```
 
-Use `TermBridgeKitTerminalController` when you want to feed remote
-terminal bytes into the surface, react to size changes, or forward input
-to something like SSH.
+### Configuring the connection
 
-Set `TERMBRIDGEKIT_DEBUG_INPUT=1` to log keyboard/mouse events.
+`TermBridgeKitConnectionConfig` is `@Observable`-friendly and validates itself:
 
-## Demo
+```swift
+workspace.connection.host     = "192.168.1.10"
+workspace.connection.port     = 22
+workspace.connection.username = "alice"
+
+// Password auth
+workspace.connection.authenticationMode = .password
+workspace.connection.password = "secret"
+
+// Private key auth (Ed25519, ECDSA P-256/P-384/P-521)
+workspace.connection.authenticationMode = .privateKey
+workspace.connection.privateKeyPEM = "-----BEGIN OPENSSH PRIVATE KEY-----\n..."
+
+workspace.connection.term           = "xterm-256color"  // default
+workspace.connection.startupCommand = "tmux new -A -s myapp"
+
+workspace.connection.isReadyToConnect  // true when all required fields are set
+workspace.connection.validationError   // human-readable error string or nil
+```
+
+### Workspace state
+
+```swift
+workspace.status        // TermBridgeKitSSHSession.Status — .disconnected / .connecting / .connected / .failed(String)
+workspace.isConnected   // Bool
+workspace.isConnecting  // Bool
+workspace.canConnect    // Bool — not connecting AND connection is valid
+workspace.statusMessage // Human-readable status string
+workspace.terminalSize  // TermBridgeKitTerminalSize? — updated as the view resizes
+workspace.diagnostics   // TermBridgeKitSurfaceDiagnostics?
+```
+
+## TermBridgeKitTerminalView
+
+```swift
+TermBridgeKitTerminalView(
+    controller: workspace.controller,  // optional — pass nil for a standalone surface
+    showsSystemKeyboard: true,         // iOS only — default true
+    fontSize: 13                       // optional point size override
+)
+```
+
+## Low-level usage — custom transport
+
+Use `TermBridgeKitTerminalController` directly when you want to wire up your
+own transport (WebSockets, local PTY, serial, etc.) instead of SSH.
+
+```swift
+@State private var controller = TermBridgeKitTerminalController()
+
+// Wire output from your transport into the terminal
+myTransport.onData = { data in
+    controller.processRemoteOutput(data)
+}
+
+// Wire terminal input back to your transport
+controller.onTransportWrite = { data in
+    myTransport.write(data)
+}
+
+// React to terminal resize events
+controller.onSizeChange = { size in
+    myTransport.resize(cols: size.columns, rows: size.rows)
+}
+```
+
+### Controller API
+
+| Method / property | Description |
+|---|---|
+| `processRemoteOutput(_ data: Data)` | Feed bytes from remote → terminal. Buffers until the view attaches. |
+| `focus()` / `blur()` | Forward focus events to the surface. |
+| `currentSize() -> TermBridgeKitTerminalSize?` | Current terminal dimensions. |
+| `visibleText() -> String?` | Snapshot of the visible screen text. |
+| `diagnostics() -> TermBridgeKitSurfaceDiagnostics?` | Surface diagnostic info. |
+| `onTransportWrite: ((Data) -> Void)?` | Called when the terminal wants to send bytes to the remote. |
+| `onInputText: ((String) -> Void)?` | Called for printable text input (iOS soft keyboard path). |
+| `onDeleteBackward: (() -> Void)?` | Called for backspace (iOS soft keyboard path). |
+| `onSizeChange: ((TermBridgeKitTerminalSize) -> Void)?` | Called on every resize. |
+| `onDiagnosticsChange: ((TermBridgeKitSurfaceDiagnostics) -> Void)?` | Called when diagnostics update. |
+
+## SSH key support
+
+| Type | Format |
+|---|---|
+| Ed25519 | OpenSSH PEM (`-----BEGIN OPENSSH PRIVATE KEY-----`) |
+| ECDSA P-256 | SEC1 / PKCS#8 PEM |
+| ECDSA P-384 | SEC1 / PKCS#8 PEM |
+| ECDSA P-521 | SEC1 / PKCS#8 PEM |
+
+Encrypted private keys are not supported.
+
+## Environment variable preloading
+
+`TermBridgeKitConnectionConfig.demoEnvironment()` (and
+`workspace.loadEnvironmentConfigurationIfAvailable()`) reads:
+
+| Variable | Required | Description |
+|---|---|---|
+| `TERMBRIDGEKIT_SSH_HOST` | yes | Hostname or IP |
+| `TERMBRIDGEKIT_SSH_USER` | yes | SSH username |
+| `TERMBRIDGEKIT_SSH_PRIVATE_KEY` | one of | PEM key (replace newlines with `\n`) |
+| `TERMBRIDGEKIT_SSH_PASSWORD` | one of | Login password |
+| `TERMBRIDGEKIT_SSH_PORT` | no | Default: `22` |
+| `TERMBRIDGEKIT_SSH_NAME` | no | Display name for the connection |
+| `TERMBRIDGEKIT_SSH_TERM` | no | Default: `xterm-256color` |
+| `TERMBRIDGEKIT_SSH_COMMAND` | no | Default: `tmux new -A -s termbridgekit` |
+
+Set these as scheme environment variables in Xcode (Edit Scheme → Run → Environment Variables).
+
+## Debugging
+
+Set `TERMBRIDGEKIT_DEBUG_INPUT=1` to log keyboard and mouse events.
+
+## macOS demo
+
 ```sh
 swift run TermBridgeKitDemo
 ```
 
 ## iOS demo
-Generate and open the iOS demo project with XcodeGen:
+
+Generate and open the Xcode project with XcodeGen:
 
 ```sh
 xcodegen generate
 open TermBridgeKitDemos.xcodeproj
 ```
 
-The iOS demo expects SSH settings via scheme environment variables:
-
-- `TERMBRIDGEKIT_SSH_HOST`
-- `TERMBRIDGEKIT_SSH_USER`
-- `TERMBRIDGEKIT_SSH_PRIVATE_KEY`
-- `TERMBRIDGEKIT_SSH_PASSWORD` (optional)
-- `TERMBRIDGEKIT_SSH_PORT` (optional)
-- `TERMBRIDGEKIT_SSH_COMMAND` (optional)
-
-For multiline private keys, replace newlines with `\n`.
+Select the `TermBridgeKitIOSDemo` scheme. Set `TERMBRIDGEKIT_SSH_*` environment
+variables in the scheme to preload and auto-connect on launch.
