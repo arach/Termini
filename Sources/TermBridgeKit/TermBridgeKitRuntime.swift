@@ -59,12 +59,16 @@ final class TermBridgeKitRuntime: ObservableObject {
             action_cb: { app, target, action in
                 TermBridgeKitRuntime.handleAction(app: app, target: target, action: action)
             },
-            read_clipboard_cb: { _, _, _ in
-                false
+            read_clipboard_cb: { userdata, location, state in
+                TermBridgeKitRuntime.readClipboard(userdata, location: location, state: state)
             },
-            confirm_read_clipboard_cb: { _, _, _, _ in
+            confirm_read_clipboard_cb: { userdata, string, state, _ in
+                TermBridgeKitRuntime.confirmReadClipboard(userdata, string: string, state: state)
             },
             write_clipboard_cb: { _, _, _, _, _ in
+            },
+            write_to_host_cb: { surfaceUserdata, bytes, count in
+                TermBridgeKitRuntime.writeToHost(surfaceUserdata, bytes, count)
             },
             close_surface_cb: { _, _ in
             }
@@ -116,6 +120,53 @@ final class TermBridgeKitRuntime: ObservableObject {
     ) -> Bool {
         // For now we acknowledge all actions without special handling.
         return true
+    }
+
+    private static func surfaceView(
+        from userdata: UnsafeMutableRawPointer?
+    ) -> SurfaceContainerView? {
+        guard let userdata else { return nil }
+        return Unmanaged<SurfaceContainerView>.fromOpaque(userdata).takeUnretainedValue()
+    }
+
+    private static func readClipboard(
+        _ userdata: UnsafeMutableRawPointer?,
+        location: ghostty_clipboard_e,
+        state: UnsafeMutableRawPointer?
+    ) -> Bool {
+        #if canImport(AppKit)
+        guard let view = surfaceView(from: userdata) else { return false }
+        return view.readClipboard(location: location, state: state)
+        #else
+        return false
+        #endif
+    }
+
+    private static func confirmReadClipboard(
+        _ userdata: UnsafeMutableRawPointer?,
+        string: UnsafePointer<CChar>?,
+        state: UnsafeMutableRawPointer?
+    ) {
+        #if canImport(AppKit)
+        guard let view = surfaceView(from: userdata),
+              let string else { return }
+        view.completeClipboardRequest(String(cString: string), state: state, confirmed: true)
+        #endif
+    }
+
+    private static func writeToHost(
+        _ surfaceUserdata: UnsafeMutableRawPointer?,
+        _ bytes: UnsafePointer<UInt8>?,
+        _ count: Int
+    ) {
+        guard let surfaceUserdata, let bytes, count > 0 else { return }
+        let data = Data(bytes: bytes, count: count)
+        Task { @MainActor in
+            let view = Unmanaged<SurfaceContainerView>
+                .fromOpaque(surfaceUserdata)
+                .takeUnretainedValue()
+            view.handleTransportWrite(data)
+        }
     }
 
     // MARK: - Ticking

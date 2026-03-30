@@ -10,8 +10,16 @@ struct ContentView: View {
 
     var body: some View {
         ZStack(alignment: .topLeading) {
-            TermBridgeKitTerminalView(controller: controller)
+            GeometryReader { proxy in
+                let fontSize = preferredFontSize(for: proxy.size)
+
+                TermBridgeKitTerminalView(
+                    controller: controller,
+                    fontSize: fontSize
+                )
+                .id("demo-\(Int(fontSize * 10))")
                 .ignoresSafeArea()
+            }
 
             if shouldShowStatusBanner {
                 VStack(alignment: .leading, spacing: 4) {
@@ -49,6 +57,21 @@ struct ContentView: View {
             }
             await session.connect(configuration: configuration)
         }
+    }
+
+    private func preferredFontSize(for size: CGSize) -> Double {
+        let width = max(size.width, 240)
+        let height = max(size.height, 180)
+        let isLandscape = width > height
+
+        let targetColumns = isLandscape ? 88.0 : 46.0
+        let targetRows = isLandscape ? 24.0 : 18.0
+
+        let widthLimitedSize = width / (targetColumns * 0.76)
+        let heightLimitedSize = height / (targetRows * 1.62)
+        let raw = min(widthLimitedSize, heightLimitedSize)
+        let clamped = min(max(raw, 8.0), 12.0)
+        return (clamped * 2).rounded() / 2
     }
 
     private var shouldShowStatusBanner: Bool {

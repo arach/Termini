@@ -8,36 +8,51 @@ import GhosttyKit
 public struct TermBridgeKitSurfaceView: UIViewRepresentable {
     private let controller: TermBridgeKitTerminalController?
     private let showsSystemKeyboard: Bool
+    private let fontSize: Double?
 
     public init(
         controller: TermBridgeKitTerminalController? = nil,
-        showsSystemKeyboard: Bool = true
+        showsSystemKeyboard: Bool = true,
+        fontSize: Double? = nil
     ) {
         self.controller = controller
         self.showsSystemKeyboard = showsSystemKeyboard
+        self.fontSize = fontSize
     }
 
     public func makeUIView(context: Context) -> SurfaceContainerView {
         let view = SurfaceContainerView(runtime: .shared)
         view.showsSystemKeyboard = showsSystemKeyboard
+        view.preferredFontSize = fontSize
         view.bind(controller: controller)
         return view
     }
 
     public func updateUIView(_ uiView: SurfaceContainerView, context: Context) {
         uiView.showsSystemKeyboard = showsSystemKeyboard
+        uiView.preferredFontSize = fontSize
         uiView.bind(controller: controller)
     }
 }
 
 /// UIView subclass that hosts the Ghostty surface and forwards basic iOS input.
-public final class SurfaceContainerView: UIView, UIKeyInput, UITextInputTraits {
+public final class SurfaceContainerView: UIView, UIKeyInput, UITextInputTraits, UIGestureRecognizerDelegate {
     private let runtime: TermBridgeKitRuntime
     private var surface: ghostty_surface_t?
     private var renderLink: CADisplayLink?
     private weak var controller: TermBridgeKitTerminalController?
     private var lastReportedSize: TermBridgeKitTerminalSize?
     private lazy var suppressedInputView = UIView(frame: .zero)
+    private lazy var scrollPanGestureRecognizer: UIPanGestureRecognizer = {
+        let recognizer = UIPanGestureRecognizer(target: self, action: #selector(handleScrollPan(_:)))
+        recognizer.minimumNumberOfTouches = 2
+        recognizer.maximumNumberOfTouches = 3
+        recognizer.cancelsTouchesInView = false
+        recognizer.delaysTouchesBegan = false
+        recognizer.delaysTouchesEnded = false
+        recognizer.delegate = self
+        return recognizer
+    }()
 
     public var keyboardType: UIKeyboardType = .asciiCapable
     public var autocorrectionType: UITextAutocorrectionType = .no
@@ -47,6 +62,7 @@ public final class SurfaceContainerView: UIView, UIKeyInput, UITextInputTraits {
     public var smartDashesType: UITextSmartDashesType = .no
     public var smartInsertDeleteType: UITextSmartInsertDeleteType = .no
     public var enablesReturnKeyAutomatically: Bool = false
+    public var preferredFontSize: Double?
     public var showsSystemKeyboard = true {
         didSet {
             guard oldValue != showsSystemKeyboard else { return }
@@ -71,6 +87,8 @@ public final class SurfaceContainerView: UIView, UIKeyInput, UITextInputTraits {
         backgroundColor = .black
         isOpaque = true
         contentScaleFactor = UIScreen.main.scale
+        isMultipleTouchEnabled = true
+        addGestureRecognizer(scrollPanGestureRecognizer)
     }
 
     @available(*, unavailable)
@@ -122,6 +140,49 @@ public final class SurfaceContainerView: UIView, UIKeyInput, UITextInputTraits {
     public override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
         super.touchesBegan(touches, with: event)
         _ = becomeFirstResponder()
+    }
+
+    @objc
+    private func handleScrollPan(_ gesture: UIPanGestureRecognizer) {
+        guard let surface else { return }
+
+        let translation = gesture.translation(in: self)
+        let scale = window?.screen.scale ?? UIScreen.main.scale
+        let precisionMultiplier = 8.0
+
+        switch gesture.state {
+        case .began:
+            _ = becomeFirstResponder()
+            gesture.setTranslation(.zero, in: self)
+
+        case .changed:
+            // UIPanGestureRecognizer reports movement in points. Ghostty expects
+            // precision scroll input in pixels, so convert using the display scale.
+            let deltaX = translation.x * scale * precisionMultiplier
+            let deltaY = translation.y * scale * precisionMultiplier
+            guard abs(deltaX) > 0 || abs(deltaY) > 0 else { return }
+
+            ghostty_surface_mouse_scroll(
+                surface,
+                Double(deltaX),
+                Double(deltaY),
+                ghostty_input_scroll_mods_t(0b0000_0001)
+            )
+            gesture.setTranslation(.zero, in: self)
+
+        case .ended, .cancelled, .failed:
+            gesture.setTranslation(.zero, in: self)
+
+        default:
+            break
+        }
+    }
+
+    public func gestureRecognizer(
+        _ gestureRecognizer: UIGestureRecognizer,
+        shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer
+    ) -> Bool {
+        true
     }
 
     public override func pressesBegan(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
@@ -208,7 +269,7 @@ public final class SurfaceContainerView: UIView, UIKeyInput, UITextInputTraits {
             uiview: Unmanaged.passUnretained(self).toOpaque()
         ))
         cfg.scale_factor = Double(window?.screen.scale ?? UIScreen.main.scale)
-        cfg.font_size = 0
+        cfg.font_size = Float(preferredFontSize ?? 0)
         cfg.wait_after_command = false
 
         guard let created = ghostty_surface_new(app, &cfg) else { return }
@@ -238,6 +299,10 @@ public final class SurfaceContainerView: UIView, UIKeyInput, UITextInputTraits {
     private func setSurfaceFocus(_ focused: Bool) {
         guard let surface else { return }
         ghostty_surface_set_focus(surface, focused)
+    }
+
+    func handleTransportWrite(_ data: Data) {
+        controller?.forwardTransportWrite(data)
     }
 
     private func sendText(_ text: String) {

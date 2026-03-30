@@ -67,6 +67,9 @@ public final class TermBridgeKitSSHSession {
         controller.onDeleteBackward = { [weak self] in
             self?.send("\u{7F}")
         }
+        controller.onTransportWrite = { [weak self] data in
+            self?.send(data)
+        }
     }
 
     deinit {
@@ -250,9 +253,14 @@ public final class TermBridgeKitSSHSession {
     }
 
     public func send(_ text: String) {
+        send(Data(text.utf8))
+    }
+
+    public func send(_ data: Data) {
         guard let shellChannel else { return }
-        var buffer = shellChannel.allocator.buffer(capacity: text.utf8.count)
-        buffer.writeString(text)
+        guard !data.isEmpty else { return }
+        var buffer = shellChannel.allocator.buffer(capacity: data.count)
+        buffer.writeBytes(data)
         shellChannel.writeAndFlush(buffer, promise: nil)
     }
 

@@ -8,22 +8,27 @@ import GhosttyKit
 public struct TermBridgeKitSurfaceView: NSViewRepresentable {
     private let controller: TermBridgeKitTerminalController?
     private let showsSystemKeyboard: Bool
+    private let fontSize: Double?
 
     public init(
         controller: TermBridgeKitTerminalController? = nil,
-        showsSystemKeyboard: Bool = true
+        showsSystemKeyboard: Bool = true,
+        fontSize: Double? = nil
     ) {
         self.controller = controller
         self.showsSystemKeyboard = showsSystemKeyboard
+        self.fontSize = fontSize
     }
 
     public func makeNSView(context: Context) -> SurfaceContainerView {
         let view = SurfaceContainerView(runtime: .shared)
+        view.preferredFontSize = fontSize
         view.bind(controller: controller)
         return view
     }
 
     public func updateNSView(_ nsView: SurfaceContainerView, context: Context) {
+        nsView.preferredFontSize = fontSize
         nsView.bind(controller: controller)
     }
 }
@@ -40,6 +45,7 @@ public final class SurfaceContainerView: NSView {
     private let debugInputLogging = ProcessInfo.processInfo.environment["TERMBRIDGEKIT_DEBUG_INPUT"] == "1"
     private var lastMouseLog: TimeInterval = 0
     private let mouseLogInterval: TimeInterval = 0.05
+    var preferredFontSize: Double?
 
     init(runtime: TermBridgeKitRuntime) {
         self.runtime = runtime
@@ -155,7 +161,7 @@ public final class SurfaceContainerView: NSView {
             nsview: Unmanaged.passUnretained(self).toOpaque()
         ))
         cfg.scale_factor = Double(window?.backingScaleFactor ?? NSScreen.main?.backingScaleFactor ?? 1.0)
-        cfg.font_size = 0
+        cfg.font_size = Float(preferredFontSize ?? 0)
         cfg.wait_after_command = false
 
         guard let created = ghostty_surface_new(app, &cfg) else { return }
@@ -175,6 +181,10 @@ public final class SurfaceContainerView: NSView {
         ghostty_surface_set_focus(surface, focused)
     }
 
+    func handleTransportWrite(_ data: Data) {
+        controller?.forwardTransportWrite(data)
+    }
+
     func bind(controller: TermBridgeKitTerminalController?) {
         self.controller = controller
         controller?.bind(
@@ -192,6 +202,9 @@ public final class SurfaceContainerView: NSView {
             },
             visibleText: { [weak self] in
                 self?.visibleTerminalText()
+            },
+            diagnostics: {
+                nil
             }
         )
         reportSizeIfNeeded()
@@ -272,6 +285,17 @@ public final class SurfaceContainerView: NSView {
 
     public override func keyUp(with event: NSEvent) {
         sendKeyEvent(event, action: GHOSTTY_ACTION_RELEASE)
+    }
+
+    public override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        guard event.type == .keyDown else { return false }
+        guard window?.firstResponder === self else { return false }
+        guard event.modifierFlags.contains(.command),
+              event.charactersIgnoringModifiers?.lowercased() == "v" else {
+            return false
+        }
+
+        return pasteFromClipboard()
     }
 
     private func modsFromFlags(_ flags: NSEvent.ModifierFlags) -> ghostty_input_mods_e {
@@ -446,7 +470,13 @@ public final class SurfaceContainerView: NSView {
         guard keyMonitor == nil else { return }
         keyMonitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .keyUp]) { [weak self] event in
             guard let self else { return event }
+            guard event.window == self.window, self.window?.firstResponder === self else {
+                return event
+            }
             self.logInput("monitor saw \(event.type == .keyDown ? "down" : "up") keyCode=\(event.keyCode) mods=0x\(String(self.modsFromFlags(event.modifierFlags).rawValue, radix: 16)) isKeyWindow=\(self.window?.isKeyWindow == true) firstResponder=\(String(describing: self.window?.firstResponder))")
+            if event.modifierFlags.contains(.command) {
+                return event
+            }
             switch event.type {
             case .keyDown:
                 self.sendKeyEvent(event, action: event.isARepeat ? GHOSTTY_ACTION_REPEAT : GHOSTTY_ACTION_PRESS)
@@ -474,6 +504,70 @@ public final class SurfaceContainerView: NSView {
             lastMouseLog = now
             NSLog("[TermBridgeKitSurface] \(message)")
         }
+    }
+
+    // MARK: Clipboard
+
+    @IBAction public func paste(_ sender: Any?) {
+        _ = pasteFromClipboard()
+    }
+
+    @IBAction public func pasteAsPlainText(_ sender: Any?) {
+        _ = pasteFromClipboard()
+    }
+
+    func readClipboard(
+        location: ghostty_clipboard_e,
+        state: UnsafeMutableRawPointer?
+    ) -> Bool {
+        guard let pasteboard = pasteboard(for: location),
+              let string = pasteboardString(from: pasteboard) else {
+            return false
+        }
+
+        completeClipboardRequest(string, state: state)
+        return true
+    }
+
+    func completeClipboardRequest(
+        _ string: String,
+        state: UnsafeMutableRawPointer?,
+        confirmed: Bool = false
+    ) {
+        guard let surface else { return }
+        string.withCString { ptr in
+            ghostty_surface_complete_clipboard_request(surface, ptr, state, confirmed)
+        }
+    }
+
+    private func pasteFromClipboard() -> Bool {
+        guard let surface else { return false }
+        let action = "paste_from_clipboard"
+        let success = ghostty_surface_binding_action(
+            surface,
+            action,
+            UInt(action.lengthOfBytes(using: .utf8))
+        )
+        logInput("paste_from_clipboard \(success ? "succeeded" : "failed")")
+        return success
+    }
+
+    private func pasteboard(for location: ghostty_clipboard_e) -> NSPasteboard? {
+        switch location {
+        case GHOSTTY_CLIPBOARD_STANDARD:
+            return .general
+        default:
+            return nil
+        }
+    }
+
+    private func pasteboardString(from pasteboard: NSPasteboard) -> String? {
+        if let urls = pasteboard.readObjects(forClasses: [NSURL.self]) as? [URL],
+           !urls.isEmpty {
+            return urls.map(\.path).joined(separator: " ")
+        }
+
+        return pasteboard.string(forType: .string)
     }
 }
 

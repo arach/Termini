@@ -45,6 +45,7 @@ public final class TermBridgeKitTerminalController {
 
     public var onInputText: ((String) -> Void)?
     public var onDeleteBackward: (() -> Void)?
+    public var onTransportWrite: ((Data) -> Void)?
 
     public var onSizeChange: ((TermBridgeKitTerminalSize) -> Void)? {
         didSet {
@@ -145,5 +146,10 @@ public final class TermBridgeKitTerminalController {
         guard let onDeleteBackward else { return false }
         onDeleteBackward()
         return true
+    }
+
+    func forwardTransportWrite(_ data: Data) {
+        guard !data.isEmpty else { return }
+        onTransportWrite?(data)
     }
 }
