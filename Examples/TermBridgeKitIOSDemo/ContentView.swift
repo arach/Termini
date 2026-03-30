@@ -2,69 +2,104 @@ import SwiftUI
 import TermBridgeKit
 
 struct ContentView: View {
-    @State private var controller = TermBridgeKitTerminalController()
-    @State private var sshSession: TermBridgeKitSSHSession?
-    @State private var didStartSSHConnection = false
-    @State private var terminalSize: TermBridgeKitTerminalSize?
-    @State private var connectionStatus = "Waiting for demo SSH configuration…"
+    @State private var workspace = TermBridgeKitSSHWorkspace(
+        connection: .init(startupCommand: "tmux new -A -s termbridgekit")
+    )
+    @State private var didBootstrap = false
+    @State private var showsGuide = false
 
     var body: some View {
-        ZStack(alignment: .topLeading) {
-            GeometryReader { proxy in
-                let fontSize = preferredFontSize(for: proxy.size)
-
-                TermBridgeKitTerminalView(
-                    controller: controller,
-                    fontSize: fontSize
-                )
-                .id("demo-\(Int(fontSize * 10))")
-                .ignoresSafeArea()
+        NavigationStack {
+            ScrollView {
+                VStack(spacing: 20) {
+                    TerminalPreviewCard(workspace: workspace)
+                    ConnectionConfigurationCard(workspace: workspace)
+                    GuidePreviewCard(
+                        guide: workspace.guide,
+                        showsGuide: $showsGuide
+                    )
+                }
+                .padding()
+                .padding(.bottom, 92)
             }
-
-            if shouldShowStatusBanner {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("SSH Claude Demo")
-                        .font(.caption.weight(.semibold))
-                    Text(connectionStatus)
-                        .font(.caption2.monospaced())
-                        .foregroundStyle(.secondary)
-                    if let terminalSize {
-                        Text("\(terminalSize.columns)x\(terminalSize.rows)")
-                            .font(.caption2.monospacedDigit())
-                            .foregroundStyle(.secondary)
+            .background(Color(.systemGroupedBackground))
+            .navigationTitle("SSH Starter")
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Guide", systemImage: "book.closed") {
+                        showsGuide = true
                     }
                 }
-                .padding(.horizontal, 10)
-                .padding(.vertical, 8)
-                .background(.ultraThinMaterial, in: Capsule())
-                .padding()
+            }
+            .scrollDismissesKeyboard(.interactively)
+            .safeAreaInset(edge: .bottom) {
+                ConnectBar(workspace: workspace)
+            }
+            .sheet(isPresented: $showsGuide) {
+                NavigationStack {
+                    GuideDetailScreen(guide: workspace.guide)
+                }
+            }
+            .task {
+                guard !didBootstrap else { return }
+                didBootstrap = true
+                if workspace.loadEnvironmentConfigurationIfAvailable() {
+                    await workspace.connect()
+                }
             }
         }
-        .background(.black)
-        .task {
-            let session = ensureSSHSession()
+    }
+}
 
-            controller.onSizeChange = { size in
-                terminalSize = size
-                session.updateTerminalSize(size)
+private struct TerminalPreviewCard: View {
+    let workspace: TermBridgeKitSSHWorkspace
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .top) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(workspace.connection.displayName)
+                        .font(.headline)
+                    Text(workspace.statusMessage)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+
+                Spacer()
+
+                if let size = workspace.terminalSize {
+                    Text("\(size.columns)x\(size.rows)")
+                        .font(.caption.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .background(.thinMaterial, in: Capsule())
+                }
             }
 
-            guard !didStartSSHConnection else { return }
-            didStartSSHConnection = true
-            guard let configuration = DemoSSHConfig.configuration else {
-                connectionStatus = DemoSSHConfig.instructions
-                return
+            GeometryReader { proxy in
+                TermBridgeKitTerminalView(
+                    controller: workspace.controller,
+                    fontSize: preferredFontSize(for: proxy.size)
+                )
+                .clipShape(.rect(cornerRadius: 18))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 18)
+                        .strokeBorder(.white.opacity(0.08))
+                }
             }
-            await session.connect(configuration: configuration)
+            .frame(height: 320)
         }
+        .padding(18)
+        .background(.background, in: RoundedRectangle(cornerRadius: 24))
     }
 
     private func preferredFontSize(for size: CGSize) -> Double {
-        let width = max(size.width, 240)
-        let height = max(size.height, 180)
+        let width = max(size.width, 260)
+        let height = max(size.height, 220)
         let isLandscape = width > height
 
-        let targetColumns = isLandscape ? 88.0 : 46.0
+        let targetColumns = isLandscape ? 88.0 : 52.0
         let targetRows = isLandscape ? 24.0 : 18.0
 
         let widthLimitedSize = width / (targetColumns * 0.76)
@@ -73,83 +108,223 @@ struct ContentView: View {
         let clamped = min(max(raw, 8.0), 12.0)
         return (clamped * 2).rounded() / 2
     }
+}
 
-    private var shouldShowStatusBanner: Bool {
-        switch sshSession?.status {
-        case .connected:
-            return false
-        case .none, .disconnected, .connecting, .failed:
-            return true
-        }
-    }
+private struct ConnectionConfigurationCard: View {
+    @Bindable var workspace: TermBridgeKitSSHWorkspace
 
-    private func ensureSSHSession() -> TermBridgeKitSSHSession {
-        if let sshSession {
-            return sshSession
-        }
+    var body: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            HStack {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Connection")
+                        .font(.headline)
+                    Text("This is the reusable layer above raw SSH. Define a host once and let the workspace manage the session.")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                if workspace.didLoadEnvironmentConfiguration {
+                    Text("Loaded from env")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.blue)
+                }
+            }
 
-        let session = TermBridgeKitSSHSession(controller: controller)
-        session.onStatusChange = { status in
-            switch status {
-            case .disconnected:
-                connectionStatus = "Disconnected"
-            case .connecting:
-                connectionStatus = "Connecting to \(DemoSSHConfig.hostLabel)…"
-            case .connected:
-                connectionStatus = "Connected to \(DemoSSHConfig.hostLabel)"
-            case .failed(let message):
-                connectionStatus = "SSH failed: \(message)"
+            VStack(alignment: .leading, spacing: 14) {
+                TextField("Connection Name", text: $workspace.connection.name)
+                    .textInputAutocapitalization(.words)
+                    .textFieldStyle(.roundedBorder)
+
+                TextField("Host", text: $workspace.connection.host)
+                    .textInputAutocapitalization(.never)
+                    .textContentType(.URL)
+                    .autocorrectionDisabled()
+                    .textFieldStyle(.roundedBorder)
+
+                HStack(spacing: 12) {
+                    TextField("Username", text: $workspace.connection.username)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .textFieldStyle(.roundedBorder)
+
+                    TextField("Port", value: $workspace.connection.port, format: .number)
+                        .keyboardType(.numberPad)
+                        .multilineTextAlignment(.trailing)
+                        .textFieldStyle(.roundedBorder)
+                        .frame(width: 92)
+                }
+
+                Picker("Authentication", selection: $workspace.connection.authenticationMode) {
+                    ForEach(TermBridgeKitConnectionConfig.AuthenticationMode.allCases) { mode in
+                        Text(mode.title).tag(mode)
+                    }
+                }
+                .pickerStyle(.segmented)
+
+                Text(workspace.connection.authenticationMode.guidance)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                if workspace.connection.authenticationMode == .password {
+                    SecureField("Password", text: $workspace.connection.password)
+                        .textFieldStyle(.roundedBorder)
+                } else {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Private Key")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.secondary)
+
+                        TextEditor(text: $workspace.connection.privateKeyPEM)
+                            .font(.caption.monospaced())
+                            .frame(minHeight: 140)
+                            .scrollContentBackground(.hidden)
+                            .padding(10)
+                            .background(
+                                RoundedRectangle(cornerRadius: 16)
+                                    .fill(.quaternary.opacity(0.18))
+                            )
+                    }
+                }
+
+                TextField("Startup Command", text: $workspace.connection.startupCommand, axis: .vertical)
+                    .lineLimit(1...3)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .textFieldStyle(.roundedBorder)
+            }
+
+            if let validationError = workspace.connection.validationError {
+                Label(validationError, systemImage: "exclamationmark.triangle.fill")
+                    .font(.footnote)
+                    .foregroundStyle(.orange)
+            } else {
+                Label("Ready for \(workspace.connection.credentialSummary.lowercased()) authentication at \(workspace.connection.endpointLabel).", systemImage: "checkmark.circle.fill")
+                    .font(.footnote)
+                    .foregroundStyle(.green)
+            }
+
+            if let lastErrorMessage = workspace.lastErrorMessage {
+                Text(lastErrorMessage)
+                    .font(.footnote.monospaced())
+                    .foregroundStyle(.secondary)
             }
         }
-        sshSession = session
-        return session
+        .padding(18)
+        .background(.background, in: RoundedRectangle(cornerRadius: 24))
     }
 }
 
-private enum DemoSSHConfig {
-    static var configuration: TermBridgeKitSSHConfiguration? {
-        let environment = ProcessInfo.processInfo.environment
+private struct GuidePreviewCard: View {
+    let guide: TermBridgeKitConnectionGuide
+    @Binding var showsGuide: Bool
 
-        guard let host = nonEmpty(environment["TERMBRIDGEKIT_SSH_HOST"]),
-              let username = nonEmpty(environment["TERMBRIDGEKIT_SSH_USER"])
-        else {
-            return nil
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(guide.title)
+                .font(.headline)
+            Text(guide.summary)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+
+            Button("Open Setup Guide", systemImage: "arrow.up.right.square") {
+                showsGuide = true
+            }
+            .buttonStyle(.bordered)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(18)
+        .background(.background, in: RoundedRectangle(cornerRadius: 24))
+    }
+}
 
-        let password = nonEmpty(environment["TERMBRIDGEKIT_SSH_PASSWORD"]) ?? ""
-        let privateKey = nonEmpty(environment["TERMBRIDGEKIT_SSH_PRIVATE_KEY"])?
-            .replacingOccurrences(of: "\\n", with: "\n")
+private struct ConnectBar: View {
+    let workspace: TermBridgeKitSSHWorkspace
 
-        guard !password.isEmpty || privateKey != nil else {
-            return nil
+    var body: some View {
+        VStack(spacing: 10) {
+            Divider()
+            HStack(spacing: 12) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(workspace.connection.endpointLabel)
+                        .font(.subheadline.weight(.semibold))
+                    Text(workspace.statusMessage)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                Spacer()
+
+                Button(workspace.isConnected ? "Disconnect" : "Connect") {
+                    Task {
+                        await workspace.toggleConnection()
+                    }
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(!workspace.isConnected && !workspace.canConnect)
+            }
+            .padding(.horizontal)
+            .padding(.bottom, 8)
         }
-
-        let port = Int(environment["TERMBRIDGEKIT_SSH_PORT"] ?? "") ?? 22
-        let command = nonEmpty(environment["TERMBRIDGEKIT_SSH_COMMAND"])
-
-        return TermBridgeKitSSHConfiguration(
-            host: host,
-            port: port,
-            username: username,
-            password: password,
-            privateKeyPEM: privateKey,
-            startupCommand: command
-        )
+        .background(.ultraThinMaterial)
     }
+}
 
-    static var hostLabel: String {
-        nonEmpty(ProcessInfo.processInfo.environment["TERMBRIDGEKIT_SSH_HOST"]) ?? "SSH host"
-    }
+private struct GuideDetailScreen: View {
+    let guide: TermBridgeKitConnectionGuide
+    @Environment(\.dismiss) private var dismiss
 
-    static var instructions: String {
-        "Set TERMBRIDGEKIT_SSH_HOST, _USER, and _PRIVATE_KEY."
-    }
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 18) {
+                Text(guide.summary)
+                    .font(.body)
+                    .foregroundStyle(.secondary)
 
-    private static func nonEmpty(_ value: String?) -> String? {
-        guard let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines),
-              !trimmed.isEmpty else {
-            return nil
+                ForEach(guide.sections) { section in
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text(section.title)
+                            .font(.headline)
+
+                        ForEach(section.items, id: \.self) { item in
+                            Label(item, systemImage: "circle.fill")
+                                .labelStyle(GuideItemLabelStyle())
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(16)
+                    .background(.background, in: RoundedRectangle(cornerRadius: 20))
+                }
+
+                if let footer = guide.footer {
+                    Text(footer)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .padding()
         }
-        return trimmed
+        .background(Color(.systemGroupedBackground))
+        .navigationTitle(guide.title)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button("Done") {
+                    dismiss()
+                }
+            }
+        }
+    }
+}
+
+private struct GuideItemLabelStyle: LabelStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            configuration.icon
+                .font(.system(size: 6))
+                .foregroundStyle(.secondary)
+                .padding(.top, 6)
+            configuration.title
+                .font(.subheadline)
+        }
     }
 }

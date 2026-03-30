@@ -122,6 +122,10 @@ public final class TermBridgeKitSSHSession {
             password: password.isEmpty ? nil : password,
             privateKey: parsedPrivateKey
         )
+        let initialColumns = terminalColumns
+        let initialRows = terminalRows
+        let initialPixelWidth = terminalPixelWidth
+        let initialPixelHeight = terminalPixelHeight
 
         let readyCallback: @Sendable () -> Void = { [weak self] in
             Task { @MainActor [weak self] in
@@ -193,10 +197,10 @@ public final class TermBridgeKitSSHSession {
                         return childChannel.pipeline.addHandler(
                             ChannelHandler(
                                 term: configuration.term,
-                                initialColumns: self.terminalColumns,
-                                initialRows: self.terminalRows,
-                                initialPixelWidth: self.terminalPixelWidth,
-                                initialPixelHeight: self.terminalPixelHeight,
+                                initialColumns: initialColumns,
+                                initialRows: initialRows,
+                                initialPixelWidth: initialPixelWidth,
+                                initialPixelHeight: initialPixelHeight,
                                 onReady: readyCallback,
                                 onOutput: outputCallback,
                                 onExit: exitCallback,
