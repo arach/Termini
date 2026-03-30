@@ -12,6 +12,8 @@ public struct TermBridgeKitSSHConfiguration: Equatable, Sendable {
     public var privateKeyPEM: String?
     public var term: String
     public var startupCommand: String?
+    public var hostKeyPolicy: TermBridgeKitSSHHostKeyPolicy
+    public var hostKeyFingerprint: String?
 
     public init(
         host: String,
@@ -20,7 +22,9 @@ public struct TermBridgeKitSSHConfiguration: Equatable, Sendable {
         password: String = "",
         privateKeyPEM: String? = nil,
         term: String = "xterm-256color",
-        startupCommand: String? = nil
+        startupCommand: String? = nil,
+        hostKeyPolicy: TermBridgeKitSSHHostKeyPolicy = .trustOnFirstUse,
+        hostKeyFingerprint: String? = nil
     ) {
         self.host = host
         self.port = port
@@ -29,6 +33,8 @@ public struct TermBridgeKitSSHConfiguration: Equatable, Sendable {
         self.privateKeyPEM = privateKeyPEM
         self.term = term
         self.startupCommand = startupCommand
+        self.hostKeyPolicy = hostKeyPolicy
+        self.hostKeyFingerprint = hostKeyFingerprint
     }
 }
 
@@ -86,6 +92,7 @@ public final class TermBridgeKitSSHSession {
         let password = configuration.password.trimmingCharacters(in: .whitespacesAndNewlines)
         let privateKeyPEM = configuration.privateKeyPEM?.trimmingCharacters(in: .whitespacesAndNewlines)
         let startupCommand = configuration.startupCommand?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let hostKeyFingerprint = configuration.hostKeyFingerprint?.trimmingCharacters(in: .whitespacesAndNewlines)
 
         guard !host.isEmpty, !username.isEmpty else {
             status = .failed("Missing SSH host or username.")
@@ -121,6 +128,17 @@ public final class TermBridgeKitSSHSession {
             username: username,
             password: password.isEmpty ? nil : password,
             privateKey: parsedPrivateKey
+        )
+        let hostKeyValidator = HostKeyValidator(
+            host: host,
+            port: configuration.port,
+            policy: configuration.hostKeyPolicy,
+            pinnedFingerprint: hostKeyFingerprint,
+            onNote: { [weak self] (note: String) in
+                Task { @MainActor [weak self] in
+                    self?.appendStatusLine("[TermBridgeKit] \(note)")
+                }
+            }
         )
         let initialColumns = terminalColumns
         let initialRows = terminalRows
@@ -166,7 +184,7 @@ public final class TermBridgeKitSSHSession {
                                 role: .client(
                                     .init(
                                         userAuthDelegate: authDelegate,
-                                        serverAuthDelegate: AcceptAllHostKeyValidator()
+                                        serverAuthDelegate: hostKeyValidator
                                     )
                                 ),
                                 allocator: channel.allocator,
@@ -464,13 +482,52 @@ extension TermBridgeKitSSHSession {
         }
     }
 
-    private final class AcceptAllHostKeyValidator: NIOSSHClientServerAuthenticationDelegate, @unchecked Sendable {
+    private final class HostKeyValidator: NIOSSHClientServerAuthenticationDelegate, @unchecked Sendable {
+        private let host: String
+        private let port: Int
+        private let policy: TermBridgeKitSSHHostKeyPolicy
+        private let pinnedFingerprint: String?
+        private let store: TermBridgeKitSSHKnownHostsStore
+        private let onNote: (@Sendable (String) -> Void)?
+
+        init(
+            host: String,
+            port: Int,
+            policy: TermBridgeKitSSHHostKeyPolicy,
+            pinnedFingerprint: String?,
+            store: TermBridgeKitSSHKnownHostsStore = .shared,
+            onNote: (@Sendable (String) -> Void)? = nil
+        ) {
+            self.host = host
+            self.port = port
+            self.policy = policy
+            self.pinnedFingerprint = pinnedFingerprint
+            self.store = store
+            self.onNote = onNote
+        }
+
         func validateHostKey(
             hostKey: NIOSSHPublicKey,
             validationCompletePromise: EventLoopPromise<Void>
         ) {
-            _ = hostKey
-            validationCompletePromise.succeed(())
+            do {
+                let presentedKey = try TermBridgeKitKnownHostKey(hostKey: hostKey)
+                let result = try store.validate(
+                    presentedKey: presentedKey,
+                    host: host,
+                    port: port,
+                    policy: policy,
+                    pinnedFingerprint: pinnedFingerprint
+                )
+
+                if case .trustedNewHost(let entry) = result {
+                    onNote?("Trusted new host key \(entry.fingerprint) for \(entry.host):\(entry.port)")
+                }
+
+                validationCompletePromise.succeed(())
+            } catch {
+                validationCompletePromise.fail(error)
+            }
         }
     }
 

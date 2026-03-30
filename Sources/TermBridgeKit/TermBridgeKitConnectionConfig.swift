@@ -1,6 +1,20 @@
 import Foundation
 
 public struct TermBridgeKitConnectionConfig: Codable, Equatable, Sendable {
+    private enum CodingKeys: String, CodingKey {
+        case name
+        case host
+        case port
+        case username
+        case authenticationMode
+        case password
+        case privateKeyPEM
+        case term
+        case startupCommand
+        case hostKeyPolicy
+        case hostKeyFingerprint
+    }
+
     public enum AuthenticationMode: String, CaseIterable, Codable, Identifiable, Sendable {
         case password
         case privateKey
@@ -35,6 +49,8 @@ public struct TermBridgeKitConnectionConfig: Codable, Equatable, Sendable {
     public var privateKeyPEM: String
     public var term: String
     public var startupCommand: String
+    public var hostKeyPolicy: TermBridgeKitSSHHostKeyPolicy
+    public var hostKeyFingerprint: String
 
     public init(
         name: String = "Primary Mac",
@@ -45,7 +61,9 @@ public struct TermBridgeKitConnectionConfig: Codable, Equatable, Sendable {
         password: String = "",
         privateKeyPEM: String = "",
         term: String = "xterm-256color",
-        startupCommand: String = ""
+        startupCommand: String = "",
+        hostKeyPolicy: TermBridgeKitSSHHostKeyPolicy = .trustOnFirstUse,
+        hostKeyFingerprint: String = ""
     ) {
         self.name = name
         self.host = host
@@ -56,6 +74,39 @@ public struct TermBridgeKitConnectionConfig: Codable, Equatable, Sendable {
         self.privateKeyPEM = privateKeyPEM
         self.term = term
         self.startupCommand = startupCommand
+        self.hostKeyPolicy = hostKeyPolicy
+        self.hostKeyFingerprint = hostKeyFingerprint
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+
+        self.name = try container.decodeIfPresent(String.self, forKey: .name) ?? "Primary Mac"
+        self.host = try container.decodeIfPresent(String.self, forKey: .host) ?? ""
+        self.port = try container.decodeIfPresent(Int.self, forKey: .port) ?? 22
+        self.username = try container.decodeIfPresent(String.self, forKey: .username) ?? ""
+        self.authenticationMode = try container.decodeIfPresent(AuthenticationMode.self, forKey: .authenticationMode) ?? .privateKey
+        self.password = try container.decodeIfPresent(String.self, forKey: .password) ?? ""
+        self.privateKeyPEM = try container.decodeIfPresent(String.self, forKey: .privateKeyPEM) ?? ""
+        self.term = try container.decodeIfPresent(String.self, forKey: .term) ?? "xterm-256color"
+        self.startupCommand = try container.decodeIfPresent(String.self, forKey: .startupCommand) ?? ""
+        self.hostKeyPolicy = try container.decodeIfPresent(TermBridgeKitSSHHostKeyPolicy.self, forKey: .hostKeyPolicy) ?? .trustOnFirstUse
+        self.hostKeyFingerprint = try container.decodeIfPresent(String.self, forKey: .hostKeyFingerprint) ?? ""
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(name, forKey: .name)
+        try container.encode(host, forKey: .host)
+        try container.encode(port, forKey: .port)
+        try container.encode(username, forKey: .username)
+        try container.encode(authenticationMode, forKey: .authenticationMode)
+        try container.encode(password, forKey: .password)
+        try container.encode(privateKeyPEM, forKey: .privateKeyPEM)
+        try container.encode(term, forKey: .term)
+        try container.encode(startupCommand, forKey: .startupCommand)
+        try container.encode(hostKeyPolicy, forKey: .hostKeyPolicy)
+        try container.encode(hostKeyFingerprint, forKey: .hostKeyFingerprint)
     }
 
     public var displayName: String {
@@ -128,7 +179,9 @@ public struct TermBridgeKitConnectionConfig: Codable, Equatable, Sendable {
             password: authenticationMode == .password ? password.trimmingCharacters(in: .whitespacesAndNewlines) : "",
             privateKeyPEM: authenticationMode == .privateKey ? normalizedPrivateKey(privateKeyPEM) : nil,
             term: nonEmpty(term) ?? "xterm-256color",
-            startupCommand: nonEmpty(startupCommand)
+            startupCommand: nonEmpty(startupCommand),
+            hostKeyPolicy: hostKeyPolicy,
+            hostKeyFingerprint: nonEmpty(hostKeyFingerprint)
         )
     }
 
@@ -149,6 +202,10 @@ public struct TermBridgeKitConnectionConfig: Codable, Equatable, Sendable {
             return nil
         }
 
+        let hostKeyPolicy = TermBridgeKitSSHHostKeyPolicy(
+            rawValue: nonEmpty(environment["TERMBRIDGEKIT_SSH_HOST_KEY_POLICY"]) ?? ""
+        ) ?? .trustOnFirstUse
+
         return Self(
             name: nonEmpty(environment["TERMBRIDGEKIT_SSH_NAME"]) ?? "Demo SSH Host",
             host: host,
@@ -158,7 +215,9 @@ public struct TermBridgeKitConnectionConfig: Codable, Equatable, Sendable {
             password: password,
             privateKeyPEM: privateKey,
             term: nonEmpty(environment["TERMBRIDGEKIT_SSH_TERM"]) ?? "xterm-256color",
-            startupCommand: nonEmpty(environment["TERMBRIDGEKIT_SSH_COMMAND"]) ?? "tmux new -A -s termbridgekit"
+            startupCommand: nonEmpty(environment["TERMBRIDGEKIT_SSH_COMMAND"]) ?? "tmux new -A -s termbridgekit",
+            hostKeyPolicy: hostKeyPolicy,
+            hostKeyFingerprint: nonEmpty(environment["TERMBRIDGEKIT_SSH_HOST_KEY_FINGERPRINT"]) ?? ""
         )
     }
 

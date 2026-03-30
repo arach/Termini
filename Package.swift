@@ -50,6 +50,13 @@ let package = Package(
             name: "TermBridgeKitDemo",
             dependencies: ["TermBridgeKit"],
             path: "Examples/TermBridgeKitDemo"
+        ),
+        .testTarget(
+            name: "TermBridgeKitTests",
+            dependencies: [
+                "TermBridgeKit",
+                .product(name: "NIOSSH", package: "swift-nio-ssh")
+            ]
         )
     ]
 )

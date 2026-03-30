@@ -20,6 +20,20 @@ This repo does not ship Ghostty binaries. Build `GhosttyKit.xcframework` from th
 
 The script copies the framework into `vendor/ghostty/macos`.
 
+If you keep a local Ghostty checkout in `vendor/ghostty`, you can rebuild and reinstall in one step:
+
+```sh
+./scripts/build-ghosttykit.sh
+```
+
+To update against a specific Ghostty ref first:
+
+```sh
+./scripts/build-ghosttykit.sh --fetch --ref <tag-or-commit>
+```
+
+Both scripts write `vendor/ghosttykit-metadata.json` so you can see exactly which Ghostty checkout and commit produced the installed framework.
+
 ## Architecture
 
 ```
@@ -83,6 +97,8 @@ workspace.connection.privateKeyPEM = "-----BEGIN OPENSSH PRIVATE KEY-----\n..."
 
 workspace.connection.term           = "xterm-256color"  // default
 workspace.connection.startupCommand = "tmux new -A -s myapp"
+workspace.connection.hostKeyPolicy  = .trustOnFirstUse
+workspace.connection.hostKeyFingerprint = "SHA256:..."
 
 workspace.connection.isReadyToConnect  // true when all required fields are set
 workspace.connection.validationError   // human-readable error string or nil
@@ -149,6 +165,16 @@ controller.onSizeChange = { size in
 | `onSizeChange: ((TermBridgeKitTerminalSize) -> Void)?` | Called on every resize. |
 | `onDiagnosticsChange: ((TermBridgeKitSurfaceDiagnostics) -> Void)?` | Called when diagnostics update. |
 
+## SSH host verification
+
+By default, `TermBridgeKit` uses trust-on-first-use host verification:
+
+- The first successful connection stores the server's `SHA256:` host fingerprint.
+- Later connections to the same `host:port` must present the same fingerprint.
+- You can require a pre-trusted host with `.requireStoredHostKey`.
+- You can pin an explicit fingerprint with `hostKeyFingerprint`.
+- You can bypass checks with `.acceptAny`, but that should stay a local-debug-only escape hatch.
+
 ## SSH key support
 
 | Type | Format |
@@ -175,6 +201,8 @@ Encrypted private keys are not supported.
 | `TERMBRIDGEKIT_SSH_NAME` | no | Display name for the connection |
 | `TERMBRIDGEKIT_SSH_TERM` | no | Default: `xterm-256color` |
 | `TERMBRIDGEKIT_SSH_COMMAND` | no | Default: `tmux new -A -s termbridgekit` |
+| `TERMBRIDGEKIT_SSH_HOST_KEY_POLICY` | no | `trustOnFirstUse`, `requireStoredHostKey`, or `acceptAny` |
+| `TERMBRIDGEKIT_SSH_HOST_KEY_FINGERPRINT` | no | Optional pinned `SHA256:` fingerprint |
 
 Set these as scheme environment variables in Xcode (Edit Scheme → Run → Environment Variables).
 
