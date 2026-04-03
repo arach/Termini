@@ -1,5 +1,27 @@
 // swift-tools-version: 5.9
+import Foundation
 import PackageDescription
+
+let packageRoot = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+let localGhosttyKitRelativePath = "vendor/ghostty/macos/GhosttyKit.xcframework"
+let localGhosttyKitAbsolutePath = packageRoot.appending(path: localGhosttyKitRelativePath).path
+let bundledGhosttyKitExists = FileManager.default.fileExists(atPath: localGhosttyKitAbsolutePath)
+let releaseGhosttyKitURL = "https://github.com/arach/TermBridgeKit/releases/download/0.1.0/GhosttyKit.xcframework.zip"
+let releaseGhosttyKitChecksum = "a1e30beb0e4423e875a11264ce36e4639b0d08b9a1e0f3c456e87971962eb577"
+
+let ghosttyKitTarget: Target =
+    if bundledGhosttyKitExists {
+        .binaryTarget(
+            name: "GhosttyKit",
+            path: localGhosttyKitRelativePath
+        )
+    } else {
+        .binaryTarget(
+            name: "GhosttyKit",
+            url: releaseGhosttyKitURL,
+            checksum: releaseGhosttyKitChecksum
+        )
+    }
 
 let package = Package(
     name: "TermBridgeKit",
@@ -23,10 +45,7 @@ let package = Package(
         .package(url: "https://github.com/apple/swift-nio-transport-services.git", from: "1.26.0")
     ],
     targets: [
-        .binaryTarget(
-            name: "GhosttyKit",
-            path: "vendor/ghostty/macos/GhosttyKit.xcframework"
-        ),
+        ghosttyKitTarget,
         .target(
             name: "TermBridgeKit",
             dependencies: [

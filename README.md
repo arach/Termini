@@ -7,18 +7,25 @@ but the SwiftUI API is kept small so the backend can change later.
 - macOS 14+
 - iOS 17+
 - Swift 5.9 / Xcode 15+
-- `vendor/ghostty/macos/GhosttyKit.xcframework` (git-ignored, must
-  include the slices you want to ship)
 
-## Get GhosttyKit
-This repo does not ship Ghostty binaries. Build `GhosttyKit.xcframework` from the Ghostty project, then copy it in:
+When you consume `TermBridgeKit` through Swift Package Manager, the package
+downloads `GhosttyKit` from this repo's GitHub Releases automatically.
+
+If you're working on `TermBridgeKit` itself, you can still override that with a
+local build at `vendor/ghostty/macos/GhosttyKit.xcframework`.
+
+## Local GhosttyKit override
+If you want to build or test against a local Ghostty checkout while working on
+this package, build `GhosttyKit.xcframework` from the Ghostty project, then
+copy it in:
 
 ```sh
 # After building GhosttyKit.xcframework from Ghostty's embed instructions
 ./scripts/install-ghosttykit.sh /path/to/GhosttyKit.xcframework
 ```
 
-The script copies the framework into `vendor/ghostty/macos`.
+The script copies the framework into `vendor/ghostty/macos`, which takes
+priority over the GitHub release artifact during local package development.
 
 If you keep a local Ghostty checkout in `vendor/ghostty`, you can rebuild and reinstall in one step:
 
@@ -33,6 +40,12 @@ To update against a specific Ghostty ref first:
 ```
 
 Both scripts write `vendor/ghosttykit-metadata.json` so you can see exactly which Ghostty checkout and commit produced the installed framework.
+
+To package the installed framework for a SwiftPM release artifact:
+
+```sh
+./scripts/package-ghosttykit-release.sh
+```
 
 ## Architecture
 

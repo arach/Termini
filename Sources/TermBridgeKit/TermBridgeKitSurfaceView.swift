@@ -111,8 +111,23 @@ public final class SurfaceContainerView: NSView {
         updateSurfaceSize()
     }
 
+    public override func setFrameSize(_ newSize: NSSize) {
+        super.setFrameSize(newSize)
+        updateSurfaceSize()
+    }
+
+    public override func setBoundsSize(_ newSize: NSSize) {
+        super.setBoundsSize(newSize)
+        updateSurfaceSize()
+    }
+
     public override func updateLayer() {
         super.updateLayer()
+        updateSurfaceSize()
+    }
+
+    public override func viewDidChangeBackingProperties() {
+        super.viewDidChangeBackingProperties()
         updateSurfaceSize()
     }
 
@@ -129,6 +144,7 @@ public final class SurfaceContainerView: NSView {
 
     private func updateSurfaceSize() {
         guard let surface else { return }
+        guard bounds.width > 0, bounds.height > 0 else { return }
         let scale = Double(window?.backingScaleFactor ?? NSScreen.main?.backingScaleFactor ?? 1.0)
         ghostty_surface_set_content_scale(surface, scale, scale)
         let width = UInt32(bounds.width * scale)
@@ -171,6 +187,7 @@ public final class SurfaceContainerView: NSView {
         ghostty_surface_refresh(created)
         ghostty_surface_draw(created)
         reportSizeIfNeeded()
+        scheduleDeferredSurfaceSync()
         if renderTimer == nil {
             startRenderLoop()
         }
@@ -208,6 +225,17 @@ public final class SurfaceContainerView: NSView {
             }
         )
         reportSizeIfNeeded()
+        scheduleDeferredSurfaceSync()
+    }
+
+    private func scheduleDeferredSurfaceSync() {
+        DispatchQueue.main.async { [weak self] in
+            self?.updateSurfaceSize()
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) { [weak self] in
+            self?.updateSurfaceSize()
+        }
     }
 
     private func processRemoteOutput(_ data: Data) {
