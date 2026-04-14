@@ -115,6 +115,13 @@ public final class SurfaceContainerView: UIView, UIKeyInput, UITextInputTraits, 
         fatalError("init(coder:) has not been implemented")
     }
 
+    public override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
+        super.traitCollectionDidChange(previousTraitCollection)
+        guard terminalAppearance.theme == nil else { return }
+        guard previousTraitCollection?.userInterfaceStyle != traitCollection.userInterfaceStyle else { return }
+        applyTerminalAppearanceIfNeeded(force: true)
+    }
+
     deinit {
         renderLink?.invalidate()
         if let surface {
@@ -354,7 +361,10 @@ public final class SurfaceContainerView: UIView, UIKeyInput, UITextInputTraits, 
                 ghostty_surface_set_color_scheme(surface, theme.ghosttyColorScheme)
                 processRemoteOutput(Data(theme.applyEscapeSequence.utf8))
             } else if lastAppliedAppearance.theme != nil {
+                ghostty_surface_set_color_scheme(surface, ambientGhosttyColorScheme)
                 processRemoteOutput(Data(TermBridgeKitTerminalTheme.resetEscapeSequence.utf8))
+            } else if force {
+                ghostty_surface_set_color_scheme(surface, ambientGhosttyColorScheme)
             }
         }
 
@@ -374,6 +384,15 @@ public final class SurfaceContainerView: UIView, UIKeyInput, UITextInputTraits, 
             blue: CGFloat(color.blue) / 255.0,
             alpha: 1.0
         )
+    }
+
+    private var ambientGhosttyColorScheme: ghostty_color_scheme_e {
+        switch traitCollection.userInterfaceStyle {
+        case .dark:
+            GHOSTTY_COLOR_SCHEME_DARK
+        default:
+            GHOSTTY_COLOR_SCHEME_LIGHT
+        }
     }
 
     private func applyBindingAction(_ action: String) {

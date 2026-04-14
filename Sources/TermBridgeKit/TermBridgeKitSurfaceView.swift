@@ -94,6 +94,12 @@ public final class SurfaceContainerView: NSView {
         createSurfaceIfNeeded()
     }
 
+    public override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        guard terminalAppearance.theme == nil else { return }
+        applyTerminalAppearanceIfNeeded(force: true)
+    }
+
     deinit {
         if let surface {
             ghostty_surface_free(surface)
@@ -277,7 +283,10 @@ public final class SurfaceContainerView: NSView {
                 ghostty_surface_set_color_scheme(surface, theme.ghosttyColorScheme)
                 processRemoteOutput(Data(theme.applyEscapeSequence.utf8))
             } else if lastAppliedAppearance.theme != nil {
+                ghostty_surface_set_color_scheme(surface, ambientGhosttyColorScheme)
                 processRemoteOutput(Data(TermBridgeKitTerminalTheme.resetEscapeSequence.utf8))
+            } else if force {
+                ghostty_surface_set_color_scheme(surface, ambientGhosttyColorScheme)
             }
         }
 
@@ -297,6 +306,15 @@ public final class SurfaceContainerView: NSView {
             blue: CGFloat(color.blue) / 255.0,
             alpha: 1.0
         ).cgColor
+    }
+
+    private var ambientGhosttyColorScheme: ghostty_color_scheme_e {
+        switch effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) {
+        case .darkAqua?:
+            GHOSTTY_COLOR_SCHEME_DARK
+        default:
+            GHOSTTY_COLOR_SCHEME_LIGHT
+        }
     }
 
     private func applyBindingAction(_ action: String) {
