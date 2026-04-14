@@ -52,6 +52,7 @@ To package the installed framework for a SwiftPM release artifact:
 ```
 TermBridgeKitTerminalView          SwiftUI view — wraps the Ghostty surface
 TermBridgeKitTerminalController    Bridge between the view and your transport layer
+TermBridgeKitTerminalAppearance    Theme + font sizing model for terminal presentation
 TermBridgeKitSSHWorkspace          @Observable state machine — manages a full SSH session lifecycle
 TermBridgeKitSSHSession            Low-level NIOSSH client wired to the controller
 TermBridgeKitConnectionConfig      Validated SSH connection form model
@@ -136,6 +137,20 @@ TermBridgeKitTerminalView(
     controller: workspace.controller,  // optional — pass nil for a standalone surface
     showsSystemKeyboard: true,         // iOS only — default true
     fontSize: 13                       // optional point size override
+)
+```
+
+Or use the richer appearance model when you want a reusable theme/font profile:
+
+```swift
+let appearance = TermBridgeKitTerminalAppearance(
+    theme: .midnightBloom,
+    fontSize: 13
+)
+
+TermBridgeKitTerminalView(
+    controller: workspace.controller,
+    appearance: appearance
 )
 ```
 

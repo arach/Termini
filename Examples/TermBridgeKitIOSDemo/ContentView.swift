@@ -5,6 +5,10 @@ struct ContentView: View {
     @State private var workspace = TermBridgeKitSSHWorkspace(
         connection: .init(startupCommand: "tmux new -A -s termbridgekit")
     )
+    @State private var terminalAppearance = TermBridgeKitTerminalAppearance(
+        theme: .jadeNight,
+        fontSize: 11.5
+    )
     @State private var didBootstrap = false
     @State private var showsGuide = false
 
@@ -12,7 +16,10 @@ struct ContentView: View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 20) {
-                    TerminalPreviewCard(workspace: workspace)
+                    TerminalPreviewCard(
+                        workspace: workspace,
+                        terminalAppearance: terminalAppearance
+                    )
                     ConnectionConfigurationCard(workspace: workspace)
                     GuidePreviewCard(
                         guide: workspace.guide,
@@ -53,6 +60,7 @@ struct ContentView: View {
 
 private struct TerminalPreviewCard: View {
     let workspace: TermBridgeKitSSHWorkspace
+    let terminalAppearance: TermBridgeKitTerminalAppearance
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -80,7 +88,10 @@ private struct TerminalPreviewCard: View {
             GeometryReader { proxy in
                 TermBridgeKitTerminalView(
                     controller: workspace.controller,
-                    fontSize: preferredFontSize(for: proxy.size)
+                    appearance: .init(
+                        theme: terminalAppearance.theme,
+                        fontSize: preferredFontSize(for: proxy.size)
+                    )
                 )
                 .clipShape(.rect(cornerRadius: 18))
                 .overlay {

@@ -2,10 +2,17 @@
 import Foundation
 import PackageDescription
 
-let packageRoot = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+let fileManager = FileManager.default
+let packageRootCandidates = [
+    URL(fileURLWithPath: fileManager.currentDirectoryPath),
+    URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+]
+let packageRoot = packageRootCandidates.first(where: {
+    fileManager.fileExists(atPath: $0.appending(path: "Package.swift").path)
+}) ?? packageRootCandidates[0]
 let localGhosttyKitRelativePath = "vendor/ghostty/macos/GhosttyKit.xcframework"
 let localGhosttyKitAbsolutePath = packageRoot.appending(path: localGhosttyKitRelativePath).path
-let bundledGhosttyKitExists = FileManager.default.fileExists(atPath: localGhosttyKitAbsolutePath)
+let bundledGhosttyKitExists = fileManager.fileExists(atPath: localGhosttyKitAbsolutePath)
 let releaseGhosttyKitURL = "https://github.com/arach/TermBridgeKit/releases/download/0.1.2/GhosttyKit.xcframework.zip"
 let releaseGhosttyKitChecksum = "a1e30beb0e4423e875a11264ce36e4639b0d08b9a1e0f3c456e87971962eb577"
 

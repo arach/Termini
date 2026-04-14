@@ -8,29 +8,41 @@ import GhosttyKit
 public struct TermBridgeKitSurfaceView: UIViewRepresentable {
     private let controller: TermBridgeKitTerminalController?
     private let showsSystemKeyboard: Bool
-    private let fontSize: Double?
+    private let appearance: TermBridgeKitTerminalAppearance
+
+    public init(
+        controller: TermBridgeKitTerminalController? = nil,
+        showsSystemKeyboard: Bool = true,
+        appearance: TermBridgeKitTerminalAppearance = .default
+    ) {
+        self.controller = controller
+        self.showsSystemKeyboard = showsSystemKeyboard
+        self.appearance = appearance
+    }
 
     public init(
         controller: TermBridgeKitTerminalController? = nil,
         showsSystemKeyboard: Bool = true,
         fontSize: Double? = nil
     ) {
-        self.controller = controller
-        self.showsSystemKeyboard = showsSystemKeyboard
-        self.fontSize = fontSize
+        self.init(
+            controller: controller,
+            showsSystemKeyboard: showsSystemKeyboard,
+            appearance: .init(fontSize: fontSize)
+        )
     }
 
     public func makeUIView(context: Context) -> SurfaceContainerView {
         let view = SurfaceContainerView(runtime: .shared)
         view.showsSystemKeyboard = showsSystemKeyboard
-        view.preferredFontSize = fontSize
+        view.terminalAppearance = appearance
         view.bind(controller: controller)
         return view
     }
 
     public func updateUIView(_ uiView: SurfaceContainerView, context: Context) {
         uiView.showsSystemKeyboard = showsSystemKeyboard
-        uiView.preferredFontSize = fontSize
+        uiView.terminalAppearance = appearance
         uiView.bind(controller: controller)
     }
 }
@@ -62,7 +74,14 @@ public final class SurfaceContainerView: UIView, UIKeyInput, UITextInputTraits, 
     public var smartDashesType: UITextSmartDashesType = .no
     public var smartInsertDeleteType: UITextSmartInsertDeleteType = .no
     public var enablesReturnKeyAutomatically: Bool = false
-    public var preferredFontSize: Double?
+    private var lastAppliedAppearance: TermBridgeKitTerminalAppearance = .default
+    public var terminalAppearance: TermBridgeKitTerminalAppearance = .default {
+        didSet {
+            guard oldValue != terminalAppearance else { return }
+            updateBackgroundColor()
+            applyTerminalAppearanceIfNeeded(force: false)
+        }
+    }
     public var showsSystemKeyboard = true {
         didSet {
             guard oldValue != showsSystemKeyboard else { return }
@@ -84,7 +103,7 @@ public final class SurfaceContainerView: UIView, UIKeyInput, UITextInputTraits, 
         self.runtime = runtime
         // Ghostty expects a non-zero host view so its internal IOSurface layer can size itself.
         super.init(frame: CGRect(x: 0, y: 0, width: 800, height: 600))
-        backgroundColor = .black
+        updateBackgroundColor()
         isOpaque = true
         contentScaleFactor = UIScreen.main.scale
         isMultipleTouchEnabled = true
@@ -269,13 +288,15 @@ public final class SurfaceContainerView: UIView, UIKeyInput, UITextInputTraits, 
             uiview: Unmanaged.passUnretained(self).toOpaque()
         ))
         cfg.scale_factor = Double(window?.screen.scale ?? UIScreen.main.scale)
-        cfg.font_size = Float(preferredFontSize ?? 0)
+        cfg.font_size = Float(terminalAppearance.fontSize ?? 0)
         cfg.wait_after_command = false
 
         guard let created = ghostty_surface_new(app, &cfg) else { return }
         surface = created
+        lastAppliedAppearance = .init(fontSize: terminalAppearance.fontSize)
         synchronizeGhosttyLayerGeometry()
         setSurfaceFocus(true)
+        applyTerminalAppearanceIfNeeded(force: true)
         updateSurfaceSize()
         ghostty_surface_refresh(created)
         ghostty_surface_draw(created)
@@ -323,6 +344,45 @@ public final class SurfaceContainerView: UIView, UIKeyInput, UITextInputTraits, 
         ghostty_surface_refresh(surface)
         ghostty_surface_draw(surface)
         reportDiagnostics()
+    }
+
+    private func applyTerminalAppearanceIfNeeded(force: Bool) {
+        guard surface != nil else { return }
+
+        if force || lastAppliedAppearance.theme != terminalAppearance.theme {
+            if let theme = terminalAppearance.theme {
+                ghostty_surface_set_color_scheme(surface, theme.ghosttyColorScheme)
+                processRemoteOutput(Data(theme.applyEscapeSequence.utf8))
+            } else if lastAppliedAppearance.theme != nil {
+                processRemoteOutput(Data(TermBridgeKitTerminalTheme.resetEscapeSequence.utf8))
+            }
+        }
+
+        if let fontSize = terminalAppearance.fontSize,
+           lastAppliedAppearance.fontSize != terminalAppearance.fontSize {
+            applyBindingAction("set_font_size:\(String(format: "%.2f", min(max(fontSize, 1), 255)))")
+        }
+
+        lastAppliedAppearance = terminalAppearance
+    }
+
+    private func updateBackgroundColor() {
+        let color = terminalAppearance.theme?.background ?? .init(hex: 0x000000)
+        backgroundColor = UIColor(
+            red: CGFloat(color.red) / 255.0,
+            green: CGFloat(color.green) / 255.0,
+            blue: CGFloat(color.blue) / 255.0,
+            alpha: 1.0
+        )
+    }
+
+    private func applyBindingAction(_ action: String) {
+        guard let surface else { return }
+        _ = ghostty_surface_binding_action(
+            surface,
+            action,
+            UInt(action.lengthOfBytes(using: .utf8))
+        )
     }
 
     private func currentTerminalSize() -> TermBridgeKitTerminalSize? {
@@ -472,6 +532,17 @@ public final class SurfaceContainerView: UIView, UIKeyInput, UITextInputTraits, 
         if flags.contains(.command) { raw |= GHOSTTY_MODS_SUPER.rawValue }
         if flags.contains(.alphaShift) { raw |= GHOSTTY_MODS_CAPS.rawValue }
         return ghostty_input_mods_e(rawValue: raw)
+    }
+}
+
+private extension TermBridgeKitTerminalTheme {
+    var ghosttyColorScheme: ghostty_color_scheme_e {
+        switch colorScheme {
+        case .dark:
+            GHOSTTY_COLOR_SCHEME_DARK
+        case .light:
+            GHOSTTY_COLOR_SCHEME_LIGHT
+        }
     }
 }
 

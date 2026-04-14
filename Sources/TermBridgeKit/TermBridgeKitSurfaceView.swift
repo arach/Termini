@@ -8,27 +8,39 @@ import GhosttyKit
 public struct TermBridgeKitSurfaceView: NSViewRepresentable {
     private let controller: TermBridgeKitTerminalController?
     private let showsSystemKeyboard: Bool
-    private let fontSize: Double?
+    private let appearance: TermBridgeKitTerminalAppearance
+
+    public init(
+        controller: TermBridgeKitTerminalController? = nil,
+        showsSystemKeyboard: Bool = true,
+        appearance: TermBridgeKitTerminalAppearance = .default
+    ) {
+        self.controller = controller
+        self.showsSystemKeyboard = showsSystemKeyboard
+        self.appearance = appearance
+    }
 
     public init(
         controller: TermBridgeKitTerminalController? = nil,
         showsSystemKeyboard: Bool = true,
         fontSize: Double? = nil
     ) {
-        self.controller = controller
-        self.showsSystemKeyboard = showsSystemKeyboard
-        self.fontSize = fontSize
+        self.init(
+            controller: controller,
+            showsSystemKeyboard: showsSystemKeyboard,
+            appearance: .init(fontSize: fontSize)
+        )
     }
 
     public func makeNSView(context: Context) -> SurfaceContainerView {
         let view = SurfaceContainerView(runtime: .shared)
-        view.preferredFontSize = fontSize
+        view.terminalAppearance = appearance
         view.bind(controller: controller)
         return view
     }
 
     public func updateNSView(_ nsView: SurfaceContainerView, context: Context) {
-        nsView.preferredFontSize = fontSize
+        nsView.terminalAppearance = appearance
         nsView.bind(controller: controller)
     }
 }
@@ -42,17 +54,24 @@ public final class SurfaceContainerView: NSView {
     private var keyMonitor: Any?
     private weak var controller: TermBridgeKitTerminalController?
     private var lastReportedSize: TermBridgeKitTerminalSize?
+    private var lastAppliedAppearance: TermBridgeKitTerminalAppearance = .default
     private let debugInputLogging = ProcessInfo.processInfo.environment["TERMBRIDGEKIT_DEBUG_INPUT"] == "1"
     private var lastMouseLog: TimeInterval = 0
     private let mouseLogInterval: TimeInterval = 0.05
-    var preferredFontSize: Double?
+    var terminalAppearance: TermBridgeKitTerminalAppearance = .default {
+        didSet {
+            guard oldValue != terminalAppearance else { return }
+            updateBackgroundColor()
+            applyTerminalAppearanceIfNeeded(force: false)
+        }
+    }
 
     init(runtime: TermBridgeKitRuntime) {
         self.runtime = runtime
         super.init(frame: .zero)
         wantsLayer = true
         layerContentsRedrawPolicy = .onSetNeedsDisplay
-        layer?.backgroundColor = NSColor.black.cgColor
+        updateBackgroundColor()
     }
 
     @available(*, unavailable)
@@ -177,12 +196,14 @@ public final class SurfaceContainerView: NSView {
             nsview: Unmanaged.passUnretained(self).toOpaque()
         ))
         cfg.scale_factor = Double(window?.backingScaleFactor ?? NSScreen.main?.backingScaleFactor ?? 1.0)
-        cfg.font_size = Float(preferredFontSize ?? 0)
+        cfg.font_size = Float(terminalAppearance.fontSize ?? 0)
         cfg.wait_after_command = false
 
         guard let created = ghostty_surface_new(app, &cfg) else { return }
         surface = created
+        lastAppliedAppearance = .init(fontSize: terminalAppearance.fontSize)
         setSurfaceFocus(true)
+        applyTerminalAppearanceIfNeeded(force: true)
         updateSurfaceSize()
         ghostty_surface_refresh(created)
         ghostty_surface_draw(created)
@@ -246,6 +267,46 @@ public final class SurfaceContainerView: NSView {
         }
         ghostty_surface_refresh(surface)
         ghostty_surface_draw(surface)
+    }
+
+    private func applyTerminalAppearanceIfNeeded(force: Bool) {
+        guard surface != nil else { return }
+
+        if force || lastAppliedAppearance.theme != terminalAppearance.theme {
+            if let theme = terminalAppearance.theme {
+                ghostty_surface_set_color_scheme(surface, theme.ghosttyColorScheme)
+                processRemoteOutput(Data(theme.applyEscapeSequence.utf8))
+            } else if lastAppliedAppearance.theme != nil {
+                processRemoteOutput(Data(TermBridgeKitTerminalTheme.resetEscapeSequence.utf8))
+            }
+        }
+
+        if let fontSize = terminalAppearance.fontSize,
+           lastAppliedAppearance.fontSize != terminalAppearance.fontSize {
+            applyBindingAction("set_font_size:\(String(format: "%.2f", min(max(fontSize, 1), 255)))")
+        }
+
+        lastAppliedAppearance = terminalAppearance
+    }
+
+    private func updateBackgroundColor() {
+        let color = terminalAppearance.theme?.background ?? .init(hex: 0x000000)
+        layer?.backgroundColor = NSColor(
+            srgbRed: CGFloat(color.red) / 255.0,
+            green: CGFloat(color.green) / 255.0,
+            blue: CGFloat(color.blue) / 255.0,
+            alpha: 1.0
+        ).cgColor
+    }
+
+    private func applyBindingAction(_ action: String) {
+        guard let surface else { return }
+        let success = ghostty_surface_binding_action(
+            surface,
+            action,
+            UInt(action.lengthOfBytes(using: .utf8))
+        )
+        logInput("\(action) \(success ? "succeeded" : "failed")")
     }
 
     private func currentTerminalSize() -> TermBridgeKitTerminalSize? {
@@ -596,6 +657,17 @@ public final class SurfaceContainerView: NSView {
         }
 
         return pasteboard.string(forType: .string)
+    }
+}
+
+private extension TermBridgeKitTerminalTheme {
+    var ghosttyColorScheme: ghostty_color_scheme_e {
+        switch colorScheme {
+        case .dark:
+            GHOSTTY_COLOR_SCHEME_DARK
+        case .light:
+            GHOSTTY_COLOR_SCHEME_LIGHT
+        }
     }
 }
 
