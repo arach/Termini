@@ -364,25 +364,25 @@ private struct DesktopAppearanceStudio: View {
         )
 
         ScrollView {
-            VStack(alignment: .leading, spacing: 24) {
+            VStack(alignment: .leading, spacing: 20) {
                 AppearanceStudioHeader(
                     theme: selectedTheme.wrappedValue,
                     fontSize: fontSize.wrappedValue
                 )
 
-                HStack(alignment: .top, spacing: 22) {
+                HStack(alignment: .top, spacing: 18) {
                     AppearancePreviewColumn(
                         theme: selectedTheme.wrappedValue,
                         fontSize: fontSize.wrappedValue
                     )
-                    .frame(width: 260)
+                    .frame(width: 250)
 
-                    VStack(alignment: .leading, spacing: 22) {
+                    VStack(alignment: .leading, spacing: 18) {
                         VStack(alignment: .leading, spacing: 18) {
                             HStack(alignment: .firstTextBaseline) {
                                 VStack(alignment: .leading, spacing: 6) {
                                     Text("Theme Library")
-                                        .font(.system(size: 24, weight: .semibold, design: .rounded))
+                                        .font(.title3.weight(.semibold))
                                     Text("Pick a palette with a clear mood and apply it to the live terminal immediately.")
                                         .foregroundStyle(selectedTheme.wrappedValue.mutedForegroundColor)
                                 }
@@ -390,11 +390,8 @@ private struct DesktopAppearanceStudio: View {
                                 Spacer()
 
                                 Text("\(TermBridgeKitTerminalTheme.presets.count) presets")
-                                    .font(.caption.weight(.semibold))
-                                    .padding(.horizontal, 10)
-                                    .padding(.vertical, 6)
-                                    .background(selectedTheme.wrappedValue.accentColor.opacity(0.14), in: Capsule())
-                                    .foregroundStyle(selectedTheme.wrappedValue.accentColor)
+                                    .font(.caption)
+                                    .foregroundStyle(selectedTheme.wrappedValue.mutedForegroundColor)
                             }
 
                             ThemeGroupSection(
@@ -412,9 +409,9 @@ private struct DesktopAppearanceStudio: View {
                             )
                         }
                         .padding(22)
-                        .background(selectedTheme.wrappedValue.panelBackground, in: RoundedRectangle(cornerRadius: 28))
+                        .background(selectedTheme.wrappedValue.studioPanelBackground, in: RoundedRectangle(cornerRadius: 18))
                         .overlay {
-                            RoundedRectangle(cornerRadius: 28)
+                            RoundedRectangle(cornerRadius: 18)
                                 .strokeBorder(selectedTheme.wrappedValue.cardStroke, lineWidth: 1)
                         }
 
@@ -422,7 +419,7 @@ private struct DesktopAppearanceStudio: View {
                             HStack {
                                 VStack(alignment: .leading, spacing: 6) {
                                     Text("Type Scale")
-                                        .font(.system(size: 24, weight: .semibold, design: .rounded))
+                                        .font(.title3.weight(.semibold))
                                     Text("Tune terminal density without losing readability.")
                                         .foregroundStyle(selectedTheme.wrappedValue.mutedForegroundColor)
                                 }
@@ -430,11 +427,8 @@ private struct DesktopAppearanceStudio: View {
                                 Spacer()
 
                                 Text("\(String(format: "%.1f", fontSize.wrappedValue)) pt")
-                                    .font(.system(size: 22, weight: .semibold, design: .rounded).monospacedDigit())
-                                    .padding(.horizontal, 16)
-                                    .padding(.vertical, 10)
-                                    .background(selectedTheme.wrappedValue.accentColor.opacity(0.14), in: Capsule())
-                                    .foregroundStyle(selectedTheme.wrappedValue.accentColor)
+                                    .font(.headline.monospacedDigit())
+                                    .foregroundStyle(selectedTheme.wrappedValue.foregroundColor)
                             }
 
                             VStack(alignment: .leading, spacing: 10) {
@@ -467,9 +461,9 @@ private struct DesktopAppearanceStudio: View {
                                 .foregroundStyle(selectedTheme.wrappedValue.mutedForegroundColor)
                         }
                         .padding(22)
-                        .background(selectedTheme.wrappedValue.panelBackground, in: RoundedRectangle(cornerRadius: 28))
+                        .background(selectedTheme.wrappedValue.studioPanelBackground, in: RoundedRectangle(cornerRadius: 18))
                         .overlay {
-                            RoundedRectangle(cornerRadius: 28)
+                            RoundedRectangle(cornerRadius: 18)
                                 .strokeBorder(selectedTheme.wrappedValue.cardStroke, lineWidth: 1)
                         }
 
@@ -479,20 +473,20 @@ private struct DesktopAppearanceStudio: View {
                             Text("The appearance model is now in the right shape for richer profiles. Theme files and font-family support can plug into the same `TermBridgeKitTerminalAppearance` surface once that runtime capability is exposed cleanly.")
                                 .foregroundStyle(selectedTheme.wrappedValue.mutedForegroundColor)
                         }
-                        .padding(20)
-                        .background(selectedTheme.wrappedValue.cardBackground, in: RoundedRectangle(cornerRadius: 24))
+                        .padding(18)
+                        .background(selectedTheme.wrappedValue.studioPanelBackground, in: RoundedRectangle(cornerRadius: 16))
                         .overlay {
-                            RoundedRectangle(cornerRadius: 24)
+                            RoundedRectangle(cornerRadius: 16)
                                 .strokeBorder(selectedTheme.wrappedValue.cardStroke, lineWidth: 1)
                         }
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
-            .padding(28)
+            .padding(24)
         }
         .scrollIndicators(.hidden)
-        .background((appearance.theme ?? .midnightBloom).screenGradient.ignoresSafeArea())
+        .background((appearance.theme ?? .midnightBloom).studioCanvasBackground.ignoresSafeArea())
     }
 }
 
@@ -501,12 +495,12 @@ private struct AppearanceStudioHeader: View {
     let fontSize: Double
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            HStack(alignment: .top, spacing: 18) {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(alignment: .top, spacing: 16) {
                 VStack(alignment: .leading, spacing: 10) {
                     Text("Appearance Studio")
-                        .font(.system(size: 32, weight: .semibold, design: .rounded))
-                    Text("Tune the terminal like a product surface with stronger visual themes, clearer hierarchy, and type that feels intentionally chosen.")
+                        .font(.largeTitle.weight(.semibold))
+                    Text("Choose a terminal theme and dial in the type scale with a cleaner, product-aligned settings surface.")
                         .foregroundStyle(theme.mutedForegroundColor)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -514,17 +508,13 @@ private struct AppearanceStudioHeader: View {
                 Spacer()
 
                 VStack(alignment: .trailing, spacing: 8) {
-                    Text("LIVE")
-                        .font(.caption2.weight(.black))
-                        .tracking(1.2)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 7)
-                        .background(theme.accentColor.opacity(0.14), in: Capsule())
-                        .foregroundStyle(theme.accentColor)
-
-                    Text("Applied to the current session")
-                        .font(.caption)
+                    Text("Current")
+                        .font(.caption.weight(.semibold))
                         .foregroundStyle(theme.mutedForegroundColor)
+
+                    Text(theme.name)
+                        .font(.caption)
+                        .foregroundStyle(theme.foregroundColor)
                 }
             }
 
@@ -538,10 +528,10 @@ private struct AppearanceStudioHeader: View {
                 )
             }
         }
-        .padding(24)
-        .background(theme.cardBackground, in: RoundedRectangle(cornerRadius: 30))
+        .padding(20)
+        .background(theme.studioPanelBackground, in: RoundedRectangle(cornerRadius: 18))
         .overlay {
-            RoundedRectangle(cornerRadius: 30)
+            RoundedRectangle(cornerRadius: 18)
                 .strokeBorder(theme.cardStroke, lineWidth: 1)
         }
     }
@@ -552,12 +542,12 @@ private struct AppearancePreviewColumn: View {
     let fontSize: Double
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
+        VStack(alignment: .leading, spacing: 16) {
             VStack(alignment: .leading, spacing: 6) {
                 Text("Preview")
                     .font(.title3.weight(.semibold))
                 Text(theme.studioDescription)
-                    .font(.callout)
+                    .font(.subheadline)
                     .foregroundStyle(theme.mutedForegroundColor)
             }
 
@@ -594,7 +584,7 @@ private struct AppearancePreviewColumn: View {
                     ForEach(Array(theme.ansiPalette.enumerated()), id: \.offset) { _, color in
                         RoundedRectangle(cornerRadius: 8)
                             .fill(Color(terminalColor: color))
-                            .frame(height: 24)
+                            .frame(height: 20)
                             .overlay {
                                 RoundedRectangle(cornerRadius: 8)
                                     .strokeBorder(theme.cardStroke, lineWidth: 0.5)
@@ -603,10 +593,10 @@ private struct AppearancePreviewColumn: View {
                 }
             }
         }
-        .padding(22)
-        .background(theme.panelBackground, in: RoundedRectangle(cornerRadius: 28))
+        .padding(18)
+        .background(theme.studioPanelBackground, in: RoundedRectangle(cornerRadius: 18))
         .overlay {
-            RoundedRectangle(cornerRadius: 28)
+            RoundedRectangle(cornerRadius: 18)
                 .strokeBorder(theme.cardStroke, lineWidth: 1)
         }
     }
@@ -628,7 +618,7 @@ private struct ThemeGroupSection: View {
                     .foregroundStyle(selectedTheme.wrappedValue.mutedForegroundColor)
             }
 
-            LazyVGrid(columns: [GridItem(.adaptive(minimum: 200), spacing: 16)], spacing: 16) {
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 220), spacing: 12)], spacing: 12) {
                 ForEach(themes) { theme in
                     ThemeOptionCard(
                         theme: theme,
@@ -674,22 +664,22 @@ private struct FontSizeChip: View {
     var body: some View {
         Button(action: action) {
             Text(String(format: "%.0f", value))
-                .font(.system(size: 14, weight: .semibold, design: .rounded).monospacedDigit())
+                .font(.system(size: 14, weight: .medium, design: .default).monospacedDigit())
                 .frame(maxWidth: .infinity)
-                .padding(.vertical, 11)
+                .padding(.vertical, 9)
                 .background {
-                    RoundedRectangle(cornerRadius: 14)
-                        .fill(theme.cardBackground)
+                    RoundedRectangle(cornerRadius: 10)
+                        .fill(theme.studioCardBackground)
                         .overlay {
                             if isSelected {
-                                RoundedRectangle(cornerRadius: 14)
-                                    .fill(theme.accentColor.opacity(0.18))
+                                RoundedRectangle(cornerRadius: 10)
+                                    .fill(theme.accentColor.opacity(0.10))
                             }
                         }
                 }
                 .overlay {
-                    RoundedRectangle(cornerRadius: 14)
-                        .strokeBorder(isSelected ? theme.accentColor : theme.cardStroke, lineWidth: isSelected ? 1.5 : 1)
+                    RoundedRectangle(cornerRadius: 10)
+                        .strokeBorder(isSelected ? theme.accentColor : theme.cardStroke, lineWidth: 1)
                 }
                 .foregroundStyle(isSelected ? theme.accentColor : theme.foregroundColor)
         }
@@ -705,12 +695,15 @@ private struct ThemeOptionCard: View {
 
     var body: some View {
         Button(action: action) {
-            VStack(alignment: .leading, spacing: 16) {
-                HStack {
-                    Text(theme.schemeLabel.uppercased())
-                        .font(.caption2.weight(.bold))
-                        .tracking(1.1)
-                        .foregroundStyle(theme.secondaryAccentColor)
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(alignment: .firstTextBaseline) {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(theme.name)
+                            .font(.headline)
+                        Text(theme.schemeLabel)
+                            .font(.caption)
+                            .foregroundStyle(theme.mutedForegroundColor)
+                    }
 
                     Spacer()
 
@@ -718,53 +711,39 @@ private struct ThemeOptionCard: View {
                         .foregroundStyle(isSelected ? theme.accentColor : .secondary)
                 }
 
-                RoundedRectangle(cornerRadius: 18)
-                    .fill(theme.terminalShellBackground)
-                    .overlay {
-                        VStack(alignment: .leading, spacing: 10) {
-                            HStack(spacing: 6) {
-                                ForEach(Array(theme.ansiPalette.prefix(6).enumerated()), id: \.offset) { _, color in
-                                    Circle()
-                                        .fill(Color(terminalColor: color))
-                                        .frame(width: 10, height: 10)
-                                }
-                                Spacer()
-                            }
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(theme.backgroundColor)
+                    .overlay(alignment: .topLeading) {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("$ ssh product@host")
+                                .foregroundStyle(theme.accentColor)
+                            Text(theme.sampleCommand)
+                                .foregroundStyle(theme.foregroundColor)
 
-                            RoundedRectangle(cornerRadius: 12)
-                                .fill(theme.backgroundColor)
-                                .overlay(alignment: .topLeading) {
-                                    VStack(alignment: .leading, spacing: 6) {
-                                        Text("$ ssh product@host")
-                                            .foregroundStyle(theme.accentColor)
-                                        Text(theme.sampleCommand)
-                                        Text(theme.studioDescription)
-                                            .foregroundStyle(theme.mutedForegroundColor)
-                                            .lineLimit(2)
-                                    }
-                                    .font(.system(size: 11, weight: .medium, design: .monospaced))
-                                    .padding(12)
-                                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                            HStack(spacing: 6) {
+                                ForEach(Array(theme.ansiPalette.prefix(8).enumerated()), id: \.offset) { _, color in
+                                    RoundedRectangle(cornerRadius: 3)
+                                        .fill(Color(terminalColor: color))
+                                        .frame(width: 16, height: 8)
                                 }
+                            }
                         }
+                        .font(.system(size: 11, weight: .medium, design: .monospaced))
                         .padding(12)
                     }
-                    .frame(height: 130)
+                    .frame(height: 92)
 
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(theme.name)
-                        .font(.headline)
-                    Text(theme.studioTagline)
-                        .font(.caption)
-                        .foregroundStyle(theme.mutedForegroundColor)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
+                Text(theme.studioTagline)
+                    .font(.caption)
+                    .foregroundStyle(theme.mutedForegroundColor)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .lineLimit(2)
             }
-            .padding(16)
-            .background(theme.cardBackground, in: RoundedRectangle(cornerRadius: 24))
+            .padding(14)
+            .background(theme.studioCardBackground, in: RoundedRectangle(cornerRadius: 14))
             .overlay {
-                RoundedRectangle(cornerRadius: 24)
-                    .strokeBorder(isSelected ? theme.accentColor : theme.cardStroke, lineWidth: isSelected ? 2 : 1)
+                RoundedRectangle(cornerRadius: 14)
+                    .strokeBorder(isSelected ? theme.accentColor : theme.cardStroke, lineWidth: 1)
             }
         }
         .buttonStyle(.plain)
@@ -782,20 +761,16 @@ private struct ThemePreviewTerminal: View {
             HStack {
                 ThemeTrafficLights(accent: theme.accentColor)
                 Spacer()
-                VStack(spacing: 2) {
-                    Text(theme.name)
-                        .font(.caption.weight(.semibold))
-                    Text("Live session preview")
-                        .font(.caption2)
-                }
-                .foregroundStyle(theme.mutedForegroundColor)
+                Text(theme.name)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(theme.mutedForegroundColor)
                 Spacer()
                 Text("\(String(format: "%.1f", fontSize)) pt")
                     .font(.caption.monospacedDigit())
                     .foregroundStyle(theme.mutedForegroundColor)
             }
-            .padding(.horizontal, 18)
-            .padding(.vertical, 12)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
             .background(theme.terminalHeaderBackground)
 
             VStack(alignment: .leading, spacing: 10) {
@@ -809,30 +784,20 @@ private struct ThemePreviewTerminal: View {
 
                 HStack(spacing: 8) {
                     ForEach(Array(theme.ansiPalette.enumerated()), id: \.offset) { _, color in
-                        RoundedRectangle(cornerRadius: 6)
+                        RoundedRectangle(cornerRadius: 4)
                             .fill(Color(terminalColor: color))
-                            .frame(width: 22, height: 18)
+                            .frame(width: 18, height: 14)
                     }
                 }
-                .padding(.top, 8)
             }
-            .font(.system(size: 13, weight: .medium, design: .monospaced))
-            .padding(20)
+            .font(.system(size: 12, weight: .medium, design: .monospaced))
+            .padding(16)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            .background {
-                theme.backgroundColor
-                    .overlay(alignment: .bottomTrailing) {
-                        Circle()
-                            .fill(theme.accentColor.opacity(0.12))
-                            .frame(width: 160, height: 160)
-                            .blur(radius: 12)
-                            .offset(x: 36, y: 40)
-                    }
-            }
+            .background(theme.backgroundColor)
         }
-        .clipShape(RoundedRectangle(cornerRadius: 26))
+        .clipShape(RoundedRectangle(cornerRadius: 16))
         .overlay {
-            RoundedRectangle(cornerRadius: 26)
+            RoundedRectangle(cornerRadius: 16)
                 .strokeBorder(theme.surfaceStroke, lineWidth: 1)
         }
     }
@@ -958,6 +923,18 @@ private extension TermBridgeKitTerminalTheme {
 
     var sampleCommand: String {
         "theme \(id)"
+    }
+
+    var studioCanvasBackground: Color {
+        colorScheme == .dark ? backgroundColor.opacity(0.98) : Color.white
+    }
+
+    var studioPanelBackground: Color {
+        colorScheme == .dark ? .white.opacity(0.035) : .white.opacity(0.92)
+    }
+
+    var studioCardBackground: Color {
+        colorScheme == .dark ? .white.opacity(0.02) : backgroundColor.opacity(0.42)
     }
 
     var backgroundColor: Color {
