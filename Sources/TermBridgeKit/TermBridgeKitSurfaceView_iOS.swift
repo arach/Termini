@@ -383,8 +383,8 @@ public final class SurfaceContainerView: UIView, UIKeyInput, UITextInputTraits, 
 
             ghostty_surface_update_config(surface, config)
 
-            if fontSizeChanged || ((force || fontFamilyChanged) && terminalAppearance.fontSize != nil) {
-                applyBindingAction("reset_font_size")
+            if !force, fontSizeChanged {
+                scheduleFontSizeBindingUpdate()
             }
 
             ghostty_surface_refresh(surface)
@@ -424,6 +424,25 @@ public final class SurfaceContainerView: UIView, UIKeyInput, UITextInputTraits, 
             action,
             UInt(action.lengthOfBytes(using: .utf8))
         )
+    }
+
+    private func scheduleFontSizeBindingUpdate() {
+        let action: String
+        if let fontSize = terminalAppearance.fontSize {
+            action = "set_font_size:\(String(format: "%.2f", min(max(fontSize, 1), 255)))"
+        } else {
+            action = "reset_font_size"
+        }
+
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.applyBindingAction(action)
+            guard self.surface != nil else { return }
+            ghostty_surface_refresh(self.surface)
+            ghostty_surface_draw(self.surface)
+            self.reportSizeIfNeeded()
+            self.reportDiagnostics()
+        }
     }
 
     private func currentTerminalSize() -> TermBridgeKitTerminalSize? {
