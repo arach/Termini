@@ -42,6 +42,8 @@ public final class TermBridgeKitTerminalController {
     private var pendingOutputChunks: [Data] = []
     private var latestSize: TermBridgeKitTerminalSize?
     private var latestDiagnostics: TermBridgeKitSurfaceDiagnostics?
+    private var isSizeNotificationScheduled = false
+    private var isDiagnosticsNotificationScheduled = false
 
     public var onInputText: ((String) -> Void)?
     public var onDeleteBackward: (() -> Void)?
@@ -49,15 +51,13 @@ public final class TermBridgeKitTerminalController {
 
     public var onSizeChange: ((TermBridgeKitTerminalSize) -> Void)? {
         didSet {
-            guard let latestSize else { return }
-            onSizeChange?(latestSize)
+            scheduleSizeNotificationIfNeeded()
         }
     }
 
     public var onDiagnosticsChange: ((TermBridgeKitSurfaceDiagnostics) -> Void)? {
         didSet {
-            guard let latestDiagnostics else { return }
-            onDiagnosticsChange?(latestDiagnostics)
+            scheduleDiagnosticsNotificationIfNeeded()
         }
     }
 
@@ -110,12 +110,12 @@ public final class TermBridgeKitTerminalController {
 
         if let size = currentSize() {
             latestSize = size
-            onSizeChange?(size)
+            scheduleSizeNotificationIfNeeded()
         }
 
         if let diagnostics = diagnostics() {
             latestDiagnostics = diagnostics
-            onDiagnosticsChange?(diagnostics)
+            scheduleDiagnosticsNotificationIfNeeded()
         }
 
         guard !pendingOutputChunks.isEmpty else { return }
@@ -128,12 +128,12 @@ public final class TermBridgeKitTerminalController {
 
     func reportSizeChanged(_ size: TermBridgeKitTerminalSize) {
         latestSize = size
-        onSizeChange?(size)
+        scheduleSizeNotificationIfNeeded()
     }
 
     func reportDiagnosticsChanged(_ diagnostics: TermBridgeKitSurfaceDiagnostics) {
         latestDiagnostics = diagnostics
-        onDiagnosticsChange?(diagnostics)
+        scheduleDiagnosticsNotificationIfNeeded()
     }
 
     func forwardInputText(_ text: String) -> Bool {
@@ -151,5 +151,29 @@ public final class TermBridgeKitTerminalController {
     func forwardTransportWrite(_ data: Data) {
         guard !data.isEmpty else { return }
         onTransportWrite?(data)
+    }
+
+    private func scheduleSizeNotificationIfNeeded() {
+        guard latestSize != nil, !isSizeNotificationScheduled else { return }
+        isSizeNotificationScheduled = true
+
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            self.isSizeNotificationScheduled = false
+            guard let latestSize = self.latestSize else { return }
+            self.onSizeChange?(latestSize)
+        }
+    }
+
+    private func scheduleDiagnosticsNotificationIfNeeded() {
+        guard latestDiagnostics != nil, !isDiagnosticsNotificationScheduled else { return }
+        isDiagnosticsNotificationScheduled = true
+
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            self.isDiagnosticsNotificationScheduled = false
+            guard let latestDiagnostics = self.latestDiagnostics else { return }
+            self.onDiagnosticsChange?(latestDiagnostics)
+        }
     }
 }

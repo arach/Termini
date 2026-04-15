@@ -16,6 +16,7 @@ final class TermBridgeKitRuntime: ObservableObject {
     /// Timer to drive periodic ticks in case the runtime doesn't wake us up.
     private var tickTimer: Timer?
     private var notificationTokens: [NSObjectProtocol] = []
+    private var hasPendingWakeupTick = false
     private let debugInputLogging = ProcessInfo.processInfo.environment["TERMBRIDGEKIT_DEBUG_INPUT"] == "1"
 
     private init() {
@@ -110,7 +111,9 @@ final class TermBridgeKitRuntime: ObservableObject {
     private static func wakeup(_ userdata: UnsafeMutableRawPointer?) {
         guard let userdata else { return }
         let runtime = Unmanaged<TermBridgeKitRuntime>.fromOpaque(userdata).takeUnretainedValue()
-        runtime.tick()
+        Task { @MainActor in
+            runtime.scheduleWakeupTick()
+        }
     }
 
     private static func handleAction(
@@ -174,6 +177,17 @@ final class TermBridgeKitRuntime: ObservableObject {
     func tick() {
         guard let app else { return }
         ghostty_app_tick(app)
+    }
+
+    private func scheduleWakeupTick() {
+        guard !hasPendingWakeupTick else { return }
+        hasPendingWakeupTick = true
+
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.hasPendingWakeupTick = false
+            self.tick()
+        }
     }
 
     private func startTickLoop() {
