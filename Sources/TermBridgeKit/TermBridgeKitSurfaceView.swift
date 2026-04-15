@@ -207,7 +207,6 @@ public final class SurfaceContainerView: NSView {
 
         guard let created = ghostty_surface_new(app, &cfg) else { return }
         surface = created
-        lastAppliedAppearance = .init(fontSize: terminalAppearance.fontSize)
         setSurfaceFocus(true)
         applyTerminalAppearanceIfNeeded(force: true)
         updateSurfaceSize()
@@ -276,7 +275,8 @@ public final class SurfaceContainerView: NSView {
     }
 
     private func applyTerminalAppearanceIfNeeded(force: Bool) {
-        guard surface != nil else { return }
+        guard let surface else { return }
+        var canCommitAppearanceState = true
 
         if force || lastAppliedAppearance.theme != terminalAppearance.theme {
             if let theme = terminalAppearance.theme {
@@ -290,12 +290,33 @@ public final class SurfaceContainerView: NSView {
             }
         }
 
-        if let fontSize = terminalAppearance.fontSize,
-           lastAppliedAppearance.fontSize != terminalAppearance.fontSize {
-            applyBindingAction("set_font_size:\(String(format: "%.2f", min(max(fontSize, 1), 255)))")
+        let fontSizeChanged = lastAppliedAppearance.fontSize != terminalAppearance.fontSize
+        let fontFamilyChanged = lastAppliedAppearance.fontFamily != terminalAppearance.fontFamily
+        let shouldApplyFontConfig = fontSizeChanged
+            || fontFamilyChanged
+            || (force && terminalAppearance.hasRuntimeFontOverride)
+
+        if shouldApplyFontConfig {
+            guard let config = runtime.makeSurfaceConfig(for: terminalAppearance) else {
+                canCommitAppearanceState = false
+                return
+            }
+            defer { ghostty_config_free(config) }
+
+            ghostty_surface_update_config(surface, config)
+
+            if fontSizeChanged || ((force || fontFamilyChanged) && terminalAppearance.fontSize != nil) {
+                applyBindingAction("reset_font_size")
+            }
+
+            ghostty_surface_refresh(surface)
+            ghostty_surface_draw(surface)
+            reportSizeIfNeeded()
         }
 
-        lastAppliedAppearance = terminalAppearance
+        if canCommitAppearanceState {
+            lastAppliedAppearance = terminalAppearance
+        }
     }
 
     private func updateBackgroundColor() {

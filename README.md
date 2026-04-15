@@ -145,7 +145,8 @@ Or use the richer appearance model when you want a reusable theme/font profile:
 ```swift
 let appearance = TermBridgeKitTerminalAppearance(
     theme: .midnightBloom,
-    fontSize: 13
+    fontSize: 13,
+    fontFamily: "SF Mono"
 )
 
 TermBridgeKitTerminalView(

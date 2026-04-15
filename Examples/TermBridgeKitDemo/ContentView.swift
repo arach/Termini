@@ -470,7 +470,7 @@ private struct DesktopAppearanceStudio: View {
                         VStack(alignment: .leading, spacing: 10) {
                             Text("Profiles")
                                 .font(.headline)
-                            Text("The appearance model is now in the right shape for richer profiles. Theme files and font-family support can plug into the same `TermBridgeKitTerminalAppearance` surface once that runtime capability is exposed cleanly.")
+                            Text("The appearance model now carries theme, font size, and font family together. Theme-file import can build on the same `TermBridgeKitTerminalAppearance` surface cleanly.")
                                 .foregroundStyle(selectedTheme.wrappedValue.mutedForegroundColor)
                         }
                         .padding(18)

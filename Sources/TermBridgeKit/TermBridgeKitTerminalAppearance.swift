@@ -198,16 +198,33 @@ public struct TermBridgeKitTerminalTheme: Hashable, Codable, Sendable, Identifia
     }
 }
 
+public struct TermBridgeKitTerminalFontFamily: Hashable, Codable, Sendable, Identifiable, ExpressibleByStringLiteral {
+    public var name: String
+
+    public var id: String { name }
+
+    public init(name: String) {
+        self.name = name
+    }
+
+    public init(stringLiteral value: StringLiteralType) {
+        self.init(name: value)
+    }
+}
+
 public struct TermBridgeKitTerminalAppearance: Hashable, Codable, Sendable {
     public var theme: TermBridgeKitTerminalTheme?
     public var fontSize: Double?
+    public var fontFamily: TermBridgeKitTerminalFontFamily?
 
     public init(
         theme: TermBridgeKitTerminalTheme? = nil,
-        fontSize: Double? = nil
+        fontSize: Double? = nil,
+        fontFamily: TermBridgeKitTerminalFontFamily? = nil
     ) {
         self.theme = theme
         self.fontSize = fontSize
+        self.fontFamily = fontFamily
     }
 
     public static let `default` = TermBridgeKitTerminalAppearance()

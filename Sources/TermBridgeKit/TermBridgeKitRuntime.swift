@@ -238,4 +238,11 @@ final class TermBridgeKitRuntime: ObservableObject {
         ghostty_app_keyboard_changed(app)
     }
 
+    func makeSurfaceConfig(for appearance: TermBridgeKitTerminalAppearance) -> ghostty_config_t? {
+        TermBridgeKitGhosttyConfigFactory.makeConfig(
+            baseConfig: config,
+            appearance: appearance
+        )
+    }
+
 }
