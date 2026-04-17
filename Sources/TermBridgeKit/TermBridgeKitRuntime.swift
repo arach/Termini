@@ -164,7 +164,8 @@ final class TermBridgeKitRuntime: ObservableObject {
     ) {
         guard let surfaceUserdata, let bytes, count > 0 else { return }
         let data = Data(bytes: bytes, count: count)
-        Task { @MainActor in
+        // Use GCD instead of Task { @MainActor } — lower overhead for rapid key repeat.
+        DispatchQueue.main.async {
             let view = Unmanaged<SurfaceContainerView>
                 .fromOpaque(surfaceUserdata)
                 .takeUnretainedValue()
@@ -192,7 +193,7 @@ final class TermBridgeKitRuntime: ObservableObject {
 
     private func startTickLoop() {
         tickTimer = Timer.scheduledTimer(withTimeInterval: 1.0 / 60.0, repeats: true) { [weak self] _ in
-            Task { @MainActor in
+            DispatchQueue.main.async {
                 self?.tick()
             }
         }
