@@ -14,8 +14,11 @@ let packageRoot = packageRootCandidates.first(where: {
 let localGhosttyKitRelativePath = "vendor/ghostty/macos/GhosttyKit.xcframework"
 let localGhosttyKitAbsolutePath = packageRoot.appending(path: localGhosttyKitRelativePath).path
 let bundledGhosttyKitExists = fileManager.fileExists(atPath: localGhosttyKitAbsolutePath)
-let releaseGhosttyKitURL = "https://github.com/arach/TermBridgeKit/releases/download/0.1.3/GhosttyKit.xcframework.zip"
-let releaseGhosttyKitChecksum = "254f901b8fd1374791d5155bb0280d0b32addf54d477fcccbaafed418fee4bb3"
+// 0.1.3 introduced an iOS regression: the iOS surface attach path triggers
+// `-[CAMetalLayer addSublayer]` (no-arg selector, doesn't exist) and crashes.
+// 0.1.2 is the last known-good iOS build — Talkie iOS ships this version.
+let releaseGhosttyKitURL = "https://github.com/arach/TermBridgeKit/releases/download/0.1.2/GhosttyKit.xcframework.zip"
+let releaseGhosttyKitChecksum = "a1e30beb0e4423e875a11264ce36e4639b0d08b9a1e0f3c456e87971962eb577"
 
 let ghosttyKitTarget: Target =
     if bundledGhosttyKitExists {
