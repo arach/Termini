@@ -24,6 +24,9 @@ final class TerminiTerminalAppearanceTests: XCTestCase {
         return fontSize
     }
 
+    // GhosttyKit 0.1.3+ API. Currently pinned to 0.1.2 due to iOS surface
+    // regression; restore when fix lands.
+    #if false
     private func fontFamilies(from config: ghostty_config_t?) -> [String] {
         let count = Int(ghostty_config_font_family_count(config))
         return (0..<count).compactMap { index in
@@ -33,6 +36,7 @@ final class TerminiTerminalAppearanceTests: XCTestCase {
             return String(cString: value)
         }
     }
+    #endif
 
     func testPresetThemesShipWithCompleteAnsiPalettes() {
         for theme in TerminiTerminalTheme.presets {
@@ -57,6 +61,9 @@ final class TerminiTerminalAppearanceTests: XCTestCase {
         )
     }
 
+    // GhosttyKit 0.1.3+ APIs (set_font_size, set_font_family,
+    // font_family_count/get) gated below — currently pinned to 0.1.2.
+    #if false
     func testConfigFactoryAppliesFontSizeAndFontFamilyOverrides() {
         let baseConfig = makeBaseConfig()
         defer { ghostty_config_free(baseConfig) }
@@ -118,4 +125,5 @@ final class TerminiTerminalAppearanceTests: XCTestCase {
 
         XCTAssertEqual(fontFamilies(from: config), [])
     }
+    #endif
 }

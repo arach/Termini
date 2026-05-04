@@ -1,6 +1,10 @@
 .DS_Store
 .build
-.swiftpm
+# Ignore .swiftpm sub-paths individually so shared schemes can be checked in.
+.swiftpm/configuration/
+.swiftpm/xcode/xcuserdata/
+.swiftpm/xcode/package.xcworkspace/
+.swiftpm/xcode/xcshareddata/IDEWorkspaceChecks.plist
 dist/
 vendor/
 # OpenScout local state
