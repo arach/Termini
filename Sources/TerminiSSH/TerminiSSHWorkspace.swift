@@ -1,27 +1,27 @@
-import TermBridgeKit
+import Termini
 import Foundation
 import Observation
 
 @MainActor
 @Observable
-public final class TermBridgeKitSSHWorkspace {
-    public let controller: TermBridgeKitTerminalController
-    public let guide: TermBridgeKitConnectionGuide
+public final class TerminiSSHWorkspace {
+    public let controller: TerminiTerminalController
+    public let guide: TerminiConnectionGuide
 
-    public var connection: TermBridgeKitConnectionConfig
-    public private(set) var status: TermBridgeKitSSHSession.Status = .disconnected
-    public private(set) var terminalSize: TermBridgeKitTerminalSize?
-    public private(set) var diagnostics: TermBridgeKitSurfaceDiagnostics?
+    public var connection: TerminiConnectionConfig
+    public private(set) var status: TerminiSSHSession.Status = .disconnected
+    public private(set) var terminalSize: TerminiTerminalSize?
+    public private(set) var diagnostics: TerminiSurfaceDiagnostics?
     public private(set) var statusMessage: String
     public private(set) var lastErrorMessage: String?
     public private(set) var didLoadEnvironmentConfiguration = false
 
-    private var session: TermBridgeKitSSHSession?
+    private var session: TerminiSSHSession?
 
     public init(
-        connection: TermBridgeKitConnectionConfig = .init(),
-        guide: TermBridgeKitConnectionGuide = .sshStarter,
-        controller: TermBridgeKitTerminalController
+        connection: TerminiConnectionConfig = .init(),
+        guide: TerminiConnectionGuide = .sshStarter,
+        controller: TerminiTerminalController
     ) {
         self.connection = connection
         self.guide = guide
@@ -38,13 +38,13 @@ public final class TermBridgeKitSSHWorkspace {
     }
 
     public convenience init(
-        connection: TermBridgeKitConnectionConfig = .init(),
-        guide: TermBridgeKitConnectionGuide = .sshStarter
+        connection: TerminiConnectionConfig = .init(),
+        guide: TerminiConnectionGuide = .sshStarter
     ) {
         self.init(
             connection: connection,
             guide: guide,
-            controller: TermBridgeKitTerminalController()
+            controller: TerminiTerminalController()
         )
     }
 
@@ -70,7 +70,7 @@ public final class TermBridgeKitSSHWorkspace {
     public func loadEnvironmentConfigurationIfAvailable(
         _ environment: [String: String] = ProcessInfo.processInfo.environment
     ) -> Bool {
-        guard let configuration = TermBridgeKitConnectionConfig.demoEnvironment(environment) else {
+        guard let configuration = TerminiConnectionConfig.demoEnvironment(environment) else {
             return false
         }
 
@@ -112,12 +112,12 @@ public final class TermBridgeKitSSHWorkspace {
         }
     }
 
-    private func ensureSession() -> TermBridgeKitSSHSession {
+    private func ensureSession() -> TerminiSSHSession {
         if let session {
             return session
         }
 
-        let session = TermBridgeKitSSHSession(controller: controller)
+        let session = TerminiSSHSession(controller: controller)
         session.onStatusChange = { [weak self, weak session] status in
             guard let self else { return }
             self.status = status

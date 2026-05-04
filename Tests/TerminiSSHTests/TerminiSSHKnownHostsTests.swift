@@ -1,9 +1,9 @@
 import Foundation
 import NIOSSH
 import XCTest
-@testable import TermBridgeKitSSH
+@testable import TerminiSSH
 
-final class TermBridgeKitSSHKnownHostsTests: XCTestCase {
+final class TerminiSSHKnownHostsTests: XCTestCase {
     private let ed25519PublicKey =
         "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJfkNV4OS33ImTXvorZr72q4v5XhVEQKfvqsxOEJ/XaR test@example"
     private let ecdsaPublicKey =
@@ -61,7 +61,7 @@ final class TermBridgeKitSSHKnownHostsTests: XCTestCase {
             )
         ) { error in
             XCTAssertEqual(
-                error as? TermBridgeKitSSHHostKeyValidationError,
+                error as? TerminiSSHHostKeyValidationError,
                 .unknownHost(
                     host: "example.com",
                     port: 22,
@@ -94,7 +94,7 @@ final class TermBridgeKitSSHKnownHostsTests: XCTestCase {
             )
         ) { error in
             XCTAssertEqual(
-                error as? TermBridgeKitSSHHostKeyValidationError,
+                error as? TerminiSSHHostKeyValidationError,
                 .changedHostKey(
                     host: "example.com",
                     port: 22,
@@ -135,7 +135,7 @@ final class TermBridgeKitSSHKnownHostsTests: XCTestCase {
             )
         ) { error in
             XCTAssertEqual(
-                error as? TermBridgeKitSSHHostKeyValidationError,
+                error as? TerminiSSHHostKeyValidationError,
                 .fingerprintMismatch(
                     expected: "SHA256:5BPSYTUyN1Skyhu7TzjF8/t7ElACWtto8AhvcXV/2Ow",
                     presented: key.fingerprint
@@ -144,15 +144,15 @@ final class TermBridgeKitSSHKnownHostsTests: XCTestCase {
         }
     }
 
-    private func makeKnownHostKey(from openSSHPublicKey: String) throws -> TermBridgeKitKnownHostKey {
-        try TermBridgeKitKnownHostKey(hostKey: NIOSSHPublicKey(openSSHPublicKey: openSSHPublicKey))
+    private func makeKnownHostKey(from openSSHPublicKey: String) throws -> TerminiKnownHostKey {
+        try TerminiKnownHostKey(hostKey: NIOSSHPublicKey(openSSHPublicKey: openSSHPublicKey))
     }
 
-    private func makeStore() -> TermBridgeKitSSHKnownHostsStore {
-        let suiteName = "TermBridgeKitTests.\(UUID().uuidString)"
+    private func makeStore() -> TerminiSSHKnownHostsStore {
+        let suiteName = "TerminiTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!
         defaults.removePersistentDomain(forName: suiteName)
-        return TermBridgeKitSSHKnownHostsStore(
+        return TerminiSSHKnownHostsStore(
             userDefaults: defaults,
             storageKey: "known-hosts"
         )

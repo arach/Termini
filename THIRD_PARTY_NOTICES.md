@@ -4,7 +4,7 @@ This project vendors and/or redistributes third-party components. The following 
 
 ## Ghostty
 
-TermBridgeKit ships Ghostty's runtime as `GhosttyKit.xcframework`, either from
+Termini ships Ghostty's runtime as `GhosttyKit.xcframework`, either from
 the repo's GitHub release artifact or from a local development override under
 `vendor/ghostty/macos`.
 

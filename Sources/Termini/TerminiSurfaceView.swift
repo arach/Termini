@@ -5,15 +5,15 @@ import SwiftUI
 import GhosttyKit
 
 /// SwiftUI wrapper that embeds the live Ghostty surface.
-public struct TermBridgeKitSurfaceView: NSViewRepresentable {
-    private let controller: TermBridgeKitTerminalController?
+public struct TerminiSurfaceView: NSViewRepresentable {
+    private let controller: TerminiTerminalController?
     private let showsSystemKeyboard: Bool
-    private let appearance: TermBridgeKitTerminalAppearance
+    private let appearance: TerminiTerminalAppearance
 
     public init(
-        controller: TermBridgeKitTerminalController? = nil,
+        controller: TerminiTerminalController? = nil,
         showsSystemKeyboard: Bool = true,
-        appearance: TermBridgeKitTerminalAppearance = .default
+        appearance: TerminiTerminalAppearance = .default
     ) {
         self.controller = controller
         self.showsSystemKeyboard = showsSystemKeyboard
@@ -21,7 +21,7 @@ public struct TermBridgeKitSurfaceView: NSViewRepresentable {
     }
 
     public init(
-        controller: TermBridgeKitTerminalController? = nil,
+        controller: TerminiTerminalController? = nil,
         showsSystemKeyboard: Bool = true,
         fontSize: Double? = nil
     ) {
@@ -47,18 +47,18 @@ public struct TermBridgeKitSurfaceView: NSViewRepresentable {
 
 /// NSView subclass that holds the Ghostty surface and forwards basic input.
 public final class SurfaceContainerView: NSView {
-    private let runtime: TermBridgeKitRuntime
+    private let runtime: TerminiRuntime
     private var surface: ghostty_surface_t?
     private var renderTimer: Timer?
     private var trackingArea: NSTrackingArea?
     private var keyMonitor: Any?
-    private weak var controller: TermBridgeKitTerminalController?
-    private var lastReportedSize: TermBridgeKitTerminalSize?
-    private var lastAppliedAppearance: TermBridgeKitTerminalAppearance = .default
+    private weak var controller: TerminiTerminalController?
+    private var lastReportedSize: TerminiTerminalSize?
+    private var lastAppliedAppearance: TerminiTerminalAppearance = .default
     private let debugInputLogging = ProcessInfo.processInfo.environment["TERMBRIDGEKIT_DEBUG_INPUT"] == "1"
     private var lastMouseLog: TimeInterval = 0
     private let mouseLogInterval: TimeInterval = 0.05
-    var terminalAppearance: TermBridgeKitTerminalAppearance = .default {
+    var terminalAppearance: TerminiTerminalAppearance = .default {
         didSet {
             guard oldValue != terminalAppearance else { return }
             updateBackgroundColor()
@@ -66,7 +66,7 @@ public final class SurfaceContainerView: NSView {
         }
     }
 
-    init(runtime: TermBridgeKitRuntime) {
+    init(runtime: TerminiRuntime) {
         self.runtime = runtime
         super.init(frame: .zero)
         wantsLayer = true
@@ -228,7 +228,7 @@ public final class SurfaceContainerView: NSView {
         controller?.forwardTransportWrite(data)
     }
 
-    func bind(controller: TermBridgeKitTerminalController?) {
+    func bind(controller: TerminiTerminalController?) {
         self.controller = controller
         controller?.bind(
             processRemoteOutput: { [weak self] data in
@@ -284,7 +284,7 @@ public final class SurfaceContainerView: NSView {
                 processRemoteOutput(Data(theme.applyEscapeSequence.utf8))
             } else if lastAppliedAppearance.theme != nil {
                 ghostty_surface_set_color_scheme(surface, ambientGhosttyColorScheme)
-                processRemoteOutput(Data(TermBridgeKitTerminalTheme.resetEscapeSequence.utf8))
+                processRemoteOutput(Data(TerminiTerminalTheme.resetEscapeSequence.utf8))
             } else if force {
                 ghostty_surface_set_color_scheme(surface, ambientGhosttyColorScheme)
             }
@@ -366,10 +366,10 @@ public final class SurfaceContainerView: NSView {
         }
     }
 
-    private func currentTerminalSize() -> TermBridgeKitTerminalSize? {
+    private func currentTerminalSize() -> TerminiTerminalSize? {
         guard let surface else { return nil }
         let size = ghostty_surface_size(surface)
-        return TermBridgeKitTerminalSize(
+        return TerminiTerminalSize(
             columns: Int(size.columns),
             rows: Int(size.rows),
             cellWidthPixels: Int(size.cell_width_px),
@@ -640,7 +640,7 @@ public final class SurfaceContainerView: NSView {
 
     private func logInput(_ message: String) {
         guard debugInputLogging else { return }
-        NSLog("[TermBridgeKitSurface] \(message)")
+        NSLog("[TerminiSurface] \(message)")
     }
 
     private func logMouseInput(_ message: String) {
@@ -648,7 +648,7 @@ public final class SurfaceContainerView: NSView {
         let now = ProcessInfo.processInfo.systemUptime
         if now - lastMouseLog >= mouseLogInterval {
             lastMouseLog = now
-            NSLog("[TermBridgeKitSurface] \(message)")
+            NSLog("[TerminiSurface] \(message)")
         }
     }
 
@@ -717,7 +717,7 @@ public final class SurfaceContainerView: NSView {
     }
 }
 
-private extension TermBridgeKitTerminalTheme {
+private extension TerminiTerminalTheme {
     var ghosttyColorScheme: ghostty_color_scheme_e {
         switch colorScheme {
         case .dark:

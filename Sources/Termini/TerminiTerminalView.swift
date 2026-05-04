@@ -1,15 +1,15 @@
 import SwiftUI
 
 /// SwiftUI wrapper for the live Ghostty surface.
-public struct TermBridgeKitTerminalView: View {
-    private let controller: TermBridgeKitTerminalController?
+public struct TerminiTerminalView: View {
+    private let controller: TerminiTerminalController?
     private let showsSystemKeyboard: Bool
-    private let appearance: TermBridgeKitTerminalAppearance
+    private let appearance: TerminiTerminalAppearance
 
     public init(
-        controller: TermBridgeKitTerminalController? = nil,
+        controller: TerminiTerminalController? = nil,
         showsSystemKeyboard: Bool = true,
-        appearance: TermBridgeKitTerminalAppearance = .default
+        appearance: TerminiTerminalAppearance = .default
     ) {
         self.controller = controller
         self.showsSystemKeyboard = showsSystemKeyboard
@@ -17,7 +17,7 @@ public struct TermBridgeKitTerminalView: View {
     }
 
     public init(
-        controller: TermBridgeKitTerminalController? = nil,
+        controller: TerminiTerminalController? = nil,
         showsSystemKeyboard: Bool = true,
         fontSize: Double? = nil
     ) {
@@ -29,7 +29,7 @@ public struct TermBridgeKitTerminalView: View {
     }
 
     public var body: some View {
-        TermBridgeKitSurfaceView(
+        TerminiSurfaceView(
             controller: controller,
             showsSystemKeyboard: showsSystemKeyboard,
             appearance: appearance

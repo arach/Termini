@@ -4,27 +4,27 @@ import Observation
 
 @MainActor
 @Observable
-public final class TermBridgeKitLocalPTYWorkspace {
+public final class TerminiLocalPTYWorkspace {
     public enum Status: Equatable, Sendable {
         case disconnected
         case running
         case failed(String)
     }
 
-    public let controller: TermBridgeKitTerminalController
-    public var processSpec: TermBridgeKitProcessSpec
+    public let controller: TerminiTerminalController
+    public var processSpec: TerminiProcessSpec
     public private(set) var status: Status = .disconnected
-    public private(set) var terminalSize: TermBridgeKitTerminalSize?
-    public private(set) var diagnostics: TermBridgeKitSurfaceDiagnostics?
+    public private(set) var terminalSize: TerminiTerminalSize?
+    public private(set) var diagnostics: TerminiSurfaceDiagnostics?
     public private(set) var statusMessage: String
     public private(set) var lastErrorMessage: String?
     public private(set) var lastExitCode: Int32?
 
-    private var process: TermBridgeKitLocalPTYProcess?
+    private var process: TerminiLocalPTYProcess?
 
     public init(
-        processSpec: TermBridgeKitProcessSpec? = nil,
-        controller: TermBridgeKitTerminalController
+        processSpec: TerminiProcessSpec? = nil,
+        controller: TerminiTerminalController
     ) {
         self.processSpec = processSpec ?? Self.defaultShellSpec()
         self.controller = controller
@@ -51,10 +51,10 @@ public final class TermBridgeKitLocalPTYWorkspace {
         }
     }
 
-    public convenience init(processSpec: TermBridgeKitProcessSpec? = nil) {
+    public convenience init(processSpec: TerminiProcessSpec? = nil) {
         self.init(
             processSpec: processSpec,
-            controller: TermBridgeKitTerminalController()
+            controller: TerminiTerminalController()
         )
     }
 
@@ -71,7 +71,7 @@ public final class TermBridgeKitLocalPTYWorkspace {
         lastExitCode = nil
         statusMessage = "Starting \(processSpec.executableURL.lastPathComponent)…"
 
-        let process = TermBridgeKitLocalPTYProcess()
+        let process = TerminiLocalPTYProcess()
         process.onOutput = { [weak controller] data in
             Task { @MainActor in
                 controller?.processRemoteOutput(data)
@@ -121,7 +121,7 @@ public final class TermBridgeKitLocalPTYWorkspace {
         process?.send(data)
     }
 
-    public func resize(to size: TermBridgeKitLocalPTYProcess.Size) {
+    public func resize(to size: TerminiLocalPTYProcess.Size) {
         process?.resize(to: size)
     }
 
@@ -132,18 +132,18 @@ public final class TermBridgeKitLocalPTYWorkspace {
         statusMessage = "Local shell exited with code \(exitCode)."
     }
 
-    private func currentPTYSize() -> TermBridgeKitLocalPTYProcess.Size {
+    private func currentPTYSize() -> TerminiLocalPTYProcess.Size {
         if let currentSize = controller.currentSize() ?? terminalSize {
             return .init(columns: currentSize.columns, rows: currentSize.rows)
         }
         return .default
     }
 
-    private static func defaultShellSpec() -> TermBridgeKitProcessSpec {
+    private static func defaultShellSpec() -> TerminiProcessSpec {
         let environment = ProcessInfo.processInfo.environment
         let shellPath = environment["SHELL"].flatMap { $0.isEmpty ? nil : $0 } ?? "/bin/zsh"
         let workingDirectory = environment["HOME"].flatMap { $0.isEmpty ? nil : $0 } ?? NSHomeDirectory()
-        return TermBridgeKitProcessSpec(
+        return TerminiProcessSpec(
             executableURL: URL(fileURLWithPath: shellPath),
             arguments: ["-l"],
             environment: [:],

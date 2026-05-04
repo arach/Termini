@@ -7,8 +7,8 @@ import GhosttyKit
 
 /// Minimal wrapper around libghostty runtime so we can create surfaces and tick the engine.
 @MainActor
-final class TermBridgeKitRuntime: ObservableObject {
-    static let shared = TermBridgeKitRuntime()
+final class TerminiRuntime: ObservableObject {
+    static let shared = TerminiRuntime()
 
     private let config: ghostty_config_t?
     private(set) var app: ghostty_app_t?
@@ -27,7 +27,7 @@ final class TermBridgeKitRuntime: ObservableObject {
         }
         if debugInputLogging {
             NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .keyUp]) { event in
-                NSLog("[TermBridgeKitRuntime] global monitor saw \(event.type == .keyDown ? "down" : "up") keyCode=\(event.keyCode) mods=0x\(String(event.modifierFlags.rawValue, radix: 16)) windowKey=\(event.window?.isKeyWindow == true) appActive=\(NSApp.isActive)")
+                NSLog("[TerminiRuntime] global monitor saw \(event.type == .keyDown ? "down" : "up") keyCode=\(event.keyCode) mods=0x\(String(event.modifierFlags.rawValue, radix: 16)) windowKey=\(event.window?.isKeyWindow == true) appActive=\(NSApp.isActive)")
                 return event
             }
         }
@@ -55,21 +55,21 @@ final class TermBridgeKitRuntime: ObservableObject {
             userdata: Unmanaged.passUnretained(self).toOpaque(),
             supports_selection_clipboard: false,
             wakeup_cb: { userdata in
-                TermBridgeKitRuntime.wakeup(userdata)
+                TerminiRuntime.wakeup(userdata)
             },
             action_cb: { app, target, action in
-                TermBridgeKitRuntime.handleAction(app: app, target: target, action: action)
+                TerminiRuntime.handleAction(app: app, target: target, action: action)
             },
             read_clipboard_cb: { userdata, location, state in
-                TermBridgeKitRuntime.readClipboard(userdata, location: location, state: state)
+                TerminiRuntime.readClipboard(userdata, location: location, state: state)
             },
             confirm_read_clipboard_cb: { userdata, string, state, _ in
-                TermBridgeKitRuntime.confirmReadClipboard(userdata, string: string, state: state)
+                TerminiRuntime.confirmReadClipboard(userdata, string: string, state: state)
             },
             write_clipboard_cb: { _, _, _, _, _ in
             },
             write_to_host_cb: { surfaceUserdata, bytes, count in
-                TermBridgeKitRuntime.writeToHost(surfaceUserdata, bytes, count)
+                TerminiRuntime.writeToHost(surfaceUserdata, bytes, count)
             },
             close_surface_cb: { _, _ in
             }
@@ -110,7 +110,7 @@ final class TermBridgeKitRuntime: ObservableObject {
 
     private static func wakeup(_ userdata: UnsafeMutableRawPointer?) {
         guard let userdata else { return }
-        let runtime = Unmanaged<TermBridgeKitRuntime>.fromOpaque(userdata).takeUnretainedValue()
+        let runtime = Unmanaged<TerminiRuntime>.fromOpaque(userdata).takeUnretainedValue()
         Task { @MainActor in
             runtime.scheduleWakeupTick()
         }
@@ -253,8 +253,8 @@ final class TermBridgeKitRuntime: ObservableObject {
         ghostty_app_keyboard_changed(app)
     }
 
-    func makeSurfaceConfig(for appearance: TermBridgeKitTerminalAppearance) -> ghostty_config_t? {
-        TermBridgeKitGhosttyConfigFactory.makeConfig(
+    func makeSurfaceConfig(for appearance: TerminiTerminalAppearance) -> ghostty_config_t? {
+        TerminiGhosttyConfigFactory.makeConfig(
             baseConfig: config,
             appearance: appearance
         )

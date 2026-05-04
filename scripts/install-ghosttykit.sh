@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Copy a locally built GhosttyKit.xcframework into TermBridgeKit's expected location.
+# Copy a locally built GhosttyKit.xcframework into Termini's expected location.
 # Usage:
 #   scripts/install-ghosttykit.sh /path/to/GhosttyKit.xcframework
 # or set GHOSTTYKIT_PATH=/path/to/GhosttyKit.xcframework

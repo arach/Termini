@@ -1,31 +1,35 @@
-# TermBridgeKit
+# Termini
 
 Drop a native terminal surface into a SwiftUI app. Uses Ghostty today,
 but the SwiftUI API is kept small so the backend can change later.
+
+> Termini evolved from `TermBridgeKit`; the rename happened at 0.1.0. The
+> bundled `GhosttyKit.xcframework` is still hosted on the legacy
+> `arach/TermBridgeKit` GitHub releases.
 
 ## Requirements
 - macOS 14+
 - iOS 17+
 - Swift 5.9 / Xcode 15+
 
-When you consume `TermBridgeKit` through Swift Package Manager, the package
+When you consume `Termini` through Swift Package Manager, the package
 downloads `GhosttyKit` from this repo's GitHub Releases automatically.
 
-If you're working on `TermBridgeKit` itself, you can still override that with a
+If you're working on `Termini` itself, you can still override that with a
 local build at `vendor/ghostty/macos/GhosttyKit.xcframework`.
 
 ## Products and transports
 
-TermBridgeKit now ships two SwiftPM library products:
+Termini now ships two SwiftPM library products:
 
 | App shape | Products to depend on | Transport |
 |---|---|---|
-| iOS apps | `TermBridgeKit` + `TermBridgeKitSSH` | SSH only; iOS sandboxing blocks local `fork`/PTY use. |
-| macOS apps, local shell | `TermBridgeKit` only | Local PTY via `TermBridgeKitLocalPTYWorkspace` / `TermBridgeKitLocalPTYProcess`. |
-| macOS apps, remote shell | `TermBridgeKit` + `TermBridgeKitSSH` | SSH via `TermBridgeKitSSHWorkspace`. |
+| iOS apps | `Termini` + `TerminiSSH` | SSH only; iOS sandboxing blocks local `fork`/PTY use. |
+| macOS apps, local shell | `Termini` only | Local PTY via `TerminiLocalPTYWorkspace` / `TerminiLocalPTYProcess`. |
+| macOS apps, remote shell | `Termini` + `TerminiSSH` | SSH via `TerminiSSHWorkspace`. |
 
-`TermBridgeKit` contains the renderer, terminal controller, appearance model, and
-macOS-only local PTY transport. It depends on `GhosttyKit` only. `TermBridgeKitSSH`
+`Termini` contains the renderer, terminal controller, appearance model, and
+macOS-only local PTY transport. It depends on `GhosttyKit` only. `TerminiSSH`
 contains the SSH connection models, host-key handling, SSH session, and SSH
 workspace; it is the only product that pulls in SwiftNIO / NIOSSH and related
 crypto packages.
@@ -35,19 +39,19 @@ crypto packages.
 Hudson and Talkie drove this split so macOS-direct consumers can ship the
 renderer plus local shell support without carrying unused SSH dependencies.
 
-- Existing SSH integrations should add the `TermBridgeKitSSH` product and import it next to `TermBridgeKit`:
+- Existing SSH integrations should add the `TerminiSSH` product and import it next to `Termini`:
 
 ```swift
-import TermBridgeKit
-import TermBridgeKitSSH
+import Termini
+import TerminiSSH
 ```
 
-- macOS local-shell integrations can depend on `TermBridgeKit` only:
+- macOS local-shell integrations can depend on `Termini` only:
 
 ```swift
-import TermBridgeKit
+import Termini
 
-@State private var workspace = TermBridgeKitLocalPTYWorkspace()
+@State private var workspace = TerminiLocalPTYWorkspace()
 ```
 
 No renderer or SSH type was removed; the SSH surface moved into the new product.
@@ -83,27 +87,27 @@ To package the installed framework for a SwiftPM release artifact:
 ## Architecture
 
 ```
-TermBridgeKitTerminalView           SwiftUI view — wraps the Ghostty surface
-TermBridgeKitTerminalController     Bridge between the view and your transport layer
-TermBridgeKitTerminalAppearance     Theme + font sizing model for terminal presentation
-TermBridgeKitLocalPTYWorkspace      macOS @Observable state machine for local shell lifecycle
-TermBridgeKitLocalPTYProcess        macOS forkpty-backed process transport
-TermBridgeKitSSHWorkspace           @Observable state machine for SSH lifecycle (TermBridgeKitSSH)
-TermBridgeKitSSHSession             Low-level NIOSSH client wired to the controller (TermBridgeKitSSH)
-TermBridgeKitConnectionConfig       Validated SSH connection form model (TermBridgeKitSSH)
+TerminiTerminalView           SwiftUI view — wraps the Ghostty surface
+TerminiTerminalController     Bridge between the view and your transport layer
+TerminiTerminalAppearance     Theme + font sizing model for terminal presentation
+TerminiLocalPTYWorkspace      macOS @Observable state machine for local shell lifecycle
+TerminiLocalPTYProcess        macOS forkpty-backed process transport
+TerminiSSHWorkspace           @Observable state machine for SSH lifecycle (TerminiSSH)
+TerminiSSHSession             Low-level NIOSSH client wired to the controller (TerminiSSH)
+TerminiConnectionConfig       Validated SSH connection form model (TerminiSSH)
 ```
 
 ## Quickstart — macOS local PTY
 
 ```swift
 import SwiftUI
-import TermBridgeKit
+import Termini
 
 struct ContentView: View {
-    @State private var workspace = TermBridgeKitLocalPTYWorkspace()
+    @State private var workspace = TerminiLocalPTYWorkspace()
 
     var body: some View {
-        TermBridgeKitTerminalView(controller: workspace.controller)
+        TerminiTerminalView(controller: workspace.controller)
             .task { workspace.start() }
             .onDisappear { workspace.stop() }
     }
@@ -113,31 +117,31 @@ struct ContentView: View {
 To launch a specific process:
 
 ```swift
-let spec = TermBridgeKitProcessSpec(
+let spec = TerminiProcessSpec(
     executableURL: URL(fileURLWithPath: "/bin/zsh"),
     arguments: ["-l"],
     environment: [:],
     workingDirectoryURL: URL(fileURLWithPath: NSHomeDirectory())
 )
 
-@State private var workspace = TermBridgeKitLocalPTYWorkspace(processSpec: spec)
+@State private var workspace = TerminiLocalPTYWorkspace(processSpec: spec)
 ```
 
 ## Quickstart — SSH workspace
 
 ```swift
 import SwiftUI
-import TermBridgeKit
-import TermBridgeKitSSH
+import Termini
+import TerminiSSH
 
 struct ContentView: View {
-    @State private var workspace = TermBridgeKitSSHWorkspace(
+    @State private var workspace = TerminiSSHWorkspace(
         connection: .init(startupCommand: "tmux new -A -s myapp")
     )
 
     var body: some View {
         VStack {
-            TermBridgeKitTerminalView(controller: workspace.controller)
+            TerminiTerminalView(controller: workspace.controller)
 
             Button(workspace.isConnected ? "Disconnect" : "Connect") {
                 Task { await workspace.toggleConnection() }
@@ -153,10 +157,10 @@ struct ContentView: View {
 }
 ```
 
-## TermBridgeKitTerminalView
+## TerminiTerminalView
 
 ```swift
-TermBridgeKitTerminalView(
+TerminiTerminalView(
     controller: workspace.controller,
     showsSystemKeyboard: true,
     fontSize: 13
@@ -166,13 +170,13 @@ TermBridgeKitTerminalView(
 Or use the richer appearance model when you want a reusable theme/font profile:
 
 ```swift
-let appearance = TermBridgeKitTerminalAppearance(
+let appearance = TerminiTerminalAppearance(
     theme: .midnightBloom,
     fontSize: 13,
     fontFamily: "SF Mono"
 )
 
-TermBridgeKitTerminalView(
+TerminiTerminalView(
     controller: workspace.controller,
     appearance: appearance
 )
@@ -180,11 +184,11 @@ TermBridgeKitTerminalView(
 
 ## Low-level usage — custom transport
 
-Use `TermBridgeKitTerminalController` directly when you want to wire up your own
+Use `TerminiTerminalController` directly when you want to wire up your own
 transport.
 
 ```swift
-@State private var controller = TermBridgeKitTerminalController()
+@State private var controller = TerminiTerminalController()
 
 myTransport.onData = { data in
     controller.processRemoteOutput(data)
@@ -201,7 +205,7 @@ controller.onSizeChange = { size in
 
 ## SSH host verification
 
-By default, `TermBridgeKitSSH` uses trust-on-first-use host verification:
+By default, `TerminiSSH` uses trust-on-first-use host verification:
 
 - The first successful connection stores the server's `SHA256:` host fingerprint.
 - Later connections to the same `host:port` must present the same fingerprint.
@@ -213,7 +217,7 @@ Encrypted private keys are not supported.
 
 ## Environment variable preloading
 
-`TermBridgeKitConnectionConfig.demoEnvironment()` and
+`TerminiConnectionConfig.demoEnvironment()` and
 `workspace.loadEnvironmentConfigurationIfAvailable()` read `TERMBRIDGEKIT_SSH_*`
 variables for the SSH demos.
 
@@ -224,10 +228,10 @@ Set `TERMBRIDGEKIT_DEBUG_INPUT=1` to log keyboard and mouse events.
 ## macOS demo
 
 ```sh
-swift run TermBridgeKitDemo
+swift run TerminiDemo
 ```
 
-The macOS demo launches a local login shell through `TermBridgeKitLocalPTYWorkspace`.
+The macOS demo launches a local login shell through `TerminiLocalPTYWorkspace`.
 
 ## iOS demo
 
@@ -235,8 +239,8 @@ Generate and open the Xcode project with XcodeGen:
 
 ```sh
 xcodegen generate
-open TermBridgeKitDemos.xcodeproj
+open TerminiDemos.xcodeproj
 ```
 
-Select the `TermBridgeKitIOSDemo` scheme. Set `TERMBRIDGEKIT_SSH_*` environment
+Select the `TerminiIOSDemo` scheme. Set `TERMBRIDGEKIT_SSH_*` environment
 variables in the scheme to preload and auto-connect on launch.

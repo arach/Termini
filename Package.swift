@@ -43,23 +43,23 @@ let terminalLinkerSettings: [LinkerSetting] = [
 ]
 
 let package = Package(
-    name: "TermBridgeKit",
+    name: "Termini",
     platforms: [
         .macOS(.v14),
         .iOS(.v17)
     ],
     products: [
         .library(
-            name: "TermBridgeKit",
-            targets: ["TermBridgeKit"]
+            name: "Termini",
+            targets: ["Termini"]
         ),
         .library(
-            name: "TermBridgeKitSSH",
-            targets: ["TermBridgeKitSSH"]
+            name: "TerminiSSH",
+            targets: ["TerminiSSH"]
         ),
         .executable(
-            name: "TermBridgeKitDemo",
-            targets: ["TermBridgeKitDemo"]
+            name: "TerminiDemo",
+            targets: ["TerminiDemo"]
         )
     ],
     dependencies: [
@@ -70,34 +70,34 @@ let package = Package(
     targets: [
         ghosttyKitTarget,
         .target(
-            name: "TermBridgeKit",
+            name: "Termini",
             dependencies: [
                 "GhosttyKit"
             ],
             linkerSettings: terminalLinkerSettings
         ),
         .target(
-            name: "TermBridgeKitSSH",
+            name: "TerminiSSH",
             dependencies: [
-                "TermBridgeKit",
+                "Termini",
                 .product(name: "NIOCore", package: "swift-nio"),
                 .product(name: "NIOSSH", package: "swift-nio-ssh"),
                 .product(name: "NIOTransportServices", package: "swift-nio-transport-services")
             ]
         ),
         .executableTarget(
-            name: "TermBridgeKitDemo",
-            dependencies: ["TermBridgeKit"],
-            path: "Examples/TermBridgeKitDemo"
+            name: "TerminiDemo",
+            dependencies: ["Termini"],
+            path: "Examples/TerminiDemo"
         ),
         .testTarget(
-            name: "TermBridgeKitTests",
-            dependencies: ["TermBridgeKit"]
+            name: "TerminiTests",
+            dependencies: ["Termini"]
         ),
         .testTarget(
-            name: "TermBridgeKitSSHTests",
+            name: "TerminiSSHTests",
             dependencies: [
-                "TermBridgeKitSSH",
+                "TerminiSSH",
                 .product(name: "NIOSSH", package: "swift-nio-ssh")
             ]
         )

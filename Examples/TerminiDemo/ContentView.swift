@@ -1,11 +1,11 @@
 #if os(macOS)
 import SwiftUI
-import TermBridgeKit
+import Termini
 
 struct ContentView: View {
-    @State private var workspace = TermBridgeKitLocalPTYWorkspace()
+    @State private var workspace = TerminiLocalPTYWorkspace()
     @State private var didStart = false
-    @State private var terminalAppearance = TermBridgeKitTerminalAppearance(
+    @State private var terminalAppearance = TerminiTerminalAppearance(
         theme: .midnightBloom,
         fontSize: 13
     )
@@ -14,7 +14,7 @@ struct ContentView: View {
         VStack(spacing: 0) {
             header
 
-            TermBridgeKitTerminalView(
+            TerminiTerminalView(
                 controller: workspace.controller,
                 appearance: terminalAppearance
             )

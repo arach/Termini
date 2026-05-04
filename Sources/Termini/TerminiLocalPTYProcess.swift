@@ -3,7 +3,7 @@ import Darwin
 import Dispatch
 import Foundation
 
-public struct TermBridgeKitProcessSpec: Equatable, Sendable {
+public struct TerminiProcessSpec: Equatable, Sendable {
     public var executableURL: URL
     public var arguments: [String]
     public var environment: [String: String]
@@ -22,7 +22,7 @@ public struct TermBridgeKitProcessSpec: Equatable, Sendable {
     }
 }
 
-public final class TermBridgeKitLocalPTYProcess: @unchecked Sendable {
+public final class TerminiLocalPTYProcess: @unchecked Sendable {
     public struct Size: Equatable, Sendable {
         public var columns: Int
         public var rows: Int
@@ -52,7 +52,7 @@ public final class TermBridgeKitLocalPTYProcess: @unchecked Sendable {
     public var onOutput: (@Sendable (Data) -> Void)?
     public var onExit: (@Sendable (Int32) -> Void)?
 
-    private let queue = DispatchQueue(label: "dev.arach.TermBridgeKit.local-pty")
+    private let queue = DispatchQueue(label: "dev.arach.Termini.local-pty")
     private var masterFileDescriptor: Int32 = -1
     private var childPID: pid_t = 0
     private var readSource: DispatchSourceRead?
@@ -66,7 +66,7 @@ public final class TermBridgeKitLocalPTYProcess: @unchecked Sendable {
     }
 
     public func start(
-        spec: TermBridgeKitProcessSpec,
+        spec: TerminiProcessSpec,
         initialSize: Size = .default
     ) throws {
         terminate()
@@ -105,12 +105,12 @@ public final class TermBridgeKitLocalPTYProcess: @unchecked Sendable {
             if let workingDirectory, chdir(workingDirectory) != 0 {
                 let reason = String(cString: strerror(errno))
                 let path = String(cString: workingDirectory)
-                Self.writeChildError("TermBridgeKit local PTY could not change into the working directory: \(path) (\(reason)).\r\n")
+                Self.writeChildError("Termini local PTY could not change into the working directory: \(path) (\(reason)).\r\n")
                 _exit(1)
             }
 
             guard let executablePath else {
-                Self.writeChildError("TermBridgeKit local PTY could not resolve the executable path.\r\n")
+                Self.writeChildError("Termini local PTY could not resolve the executable path.\r\n")
                 _exit(1)
             }
 
@@ -120,7 +120,7 @@ public final class TermBridgeKitLocalPTYProcess: @unchecked Sendable {
                 }
             }
 
-            let message = "TermBridgeKit local PTY failed to launch \(spec.executableURL.lastPathComponent): \(String(cString: strerror(errno))).\r\n"
+            let message = "Termini local PTY failed to launch \(spec.executableURL.lastPathComponent): \(String(cString: strerror(errno))).\r\n"
             Self.writeChildError(message)
             _exit(127)
         }
@@ -300,7 +300,7 @@ public final class TermBridgeKitLocalPTYProcess: @unchecked Sendable {
         environment["COLORTERM"] = "truecolor"
         environment["CLICOLOR"] = "1"
         environment["FORCE_COLOR"] = "1"
-        environment["TERM_PROGRAM"] = "TermBridgeKit"
+        environment["TERM_PROGRAM"] = "Termini"
 
         for (key, value) in extra {
             environment[key] = value

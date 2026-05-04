@@ -1,12 +1,12 @@
 import SwiftUI
-import TermBridgeKit
-import TermBridgeKitSSH
+import Termini
+import TerminiSSH
 
 struct ContentView: View {
-    @State private var workspace = TermBridgeKitSSHWorkspace(
+    @State private var workspace = TerminiSSHWorkspace(
         connection: .init(startupCommand: "tmux new -A -s termbridgekit")
     )
-    @State private var terminalAppearance = TermBridgeKitTerminalAppearance(
+    @State private var terminalAppearance = TerminiTerminalAppearance(
         theme: .jadeNight,
         fontSize: 11.5
     )
@@ -60,8 +60,8 @@ struct ContentView: View {
 }
 
 private struct TerminalPreviewCard: View {
-    let workspace: TermBridgeKitSSHWorkspace
-    let terminalAppearance: TermBridgeKitTerminalAppearance
+    let workspace: TerminiSSHWorkspace
+    let terminalAppearance: TerminiTerminalAppearance
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -87,7 +87,7 @@ private struct TerminalPreviewCard: View {
             }
 
             GeometryReader { proxy in
-                TermBridgeKitTerminalView(
+                TerminiTerminalView(
                     controller: workspace.controller,
                     appearance: .init(
                         theme: terminalAppearance.theme,
@@ -123,7 +123,7 @@ private struct TerminalPreviewCard: View {
 }
 
 private struct ConnectionConfigurationCard: View {
-    @Bindable var workspace: TermBridgeKitSSHWorkspace
+    @Bindable var workspace: TerminiSSHWorkspace
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
@@ -168,7 +168,7 @@ private struct ConnectionConfigurationCard: View {
                 }
 
                 Picker("Authentication", selection: $workspace.connection.authenticationMode) {
-                    ForEach(TermBridgeKitConnectionConfig.AuthenticationMode.allCases) { mode in
+                    ForEach(TerminiConnectionConfig.AuthenticationMode.allCases) { mode in
                         Text(mode.title).tag(mode)
                     }
                 }
@@ -228,7 +228,7 @@ private struct ConnectionConfigurationCard: View {
 }
 
 private struct GuidePreviewCard: View {
-    let guide: TermBridgeKitConnectionGuide
+    let guide: TerminiConnectionGuide
     @Binding var showsGuide: Bool
 
     var body: some View {
@@ -251,7 +251,7 @@ private struct GuidePreviewCard: View {
 }
 
 private struct ConnectBar: View {
-    let workspace: TermBridgeKitSSHWorkspace
+    let workspace: TerminiSSHWorkspace
 
     var body: some View {
         VStack(spacing: 10) {
@@ -283,7 +283,7 @@ private struct ConnectBar: View {
 }
 
 private struct GuideDetailScreen: View {
-    let guide: TermBridgeKitConnectionGuide
+    let guide: TerminiConnectionGuide
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {

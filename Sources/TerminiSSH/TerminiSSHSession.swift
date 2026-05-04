@@ -1,11 +1,11 @@
-import TermBridgeKit
+import Termini
 import CryptoKit
 import Foundation
 import NIOCore
 @preconcurrency import NIOSSH
 import NIOTransportServices
 
-public struct TermBridgeKitSSHConfiguration: Equatable, Sendable {
+public struct TerminiSSHConfiguration: Equatable, Sendable {
     public var host: String
     public var port: Int
     public var username: String
@@ -13,7 +13,7 @@ public struct TermBridgeKitSSHConfiguration: Equatable, Sendable {
     public var privateKeyPEM: String?
     public var term: String
     public var startupCommand: String?
-    public var hostKeyPolicy: TermBridgeKitSSHHostKeyPolicy
+    public var hostKeyPolicy: TerminiSSHHostKeyPolicy
     public var hostKeyFingerprint: String?
 
     public init(
@@ -24,7 +24,7 @@ public struct TermBridgeKitSSHConfiguration: Equatable, Sendable {
         privateKeyPEM: String? = nil,
         term: String = "xterm-256color",
         startupCommand: String? = nil,
-        hostKeyPolicy: TermBridgeKitSSHHostKeyPolicy = .trustOnFirstUse,
+        hostKeyPolicy: TerminiSSHHostKeyPolicy = .trustOnFirstUse,
         hostKeyFingerprint: String? = nil
     ) {
         self.host = host
@@ -40,7 +40,7 @@ public struct TermBridgeKitSSHConfiguration: Equatable, Sendable {
 }
 
 @MainActor
-public final class TermBridgeKitSSHSession {
+public final class TerminiSSHSession {
     public enum Status: Equatable, Sendable {
         case disconnected
         case connecting
@@ -57,7 +57,7 @@ public final class TermBridgeKitSSHSession {
         didSet { onStatusChange?(status) }
     }
 
-    private let controller: TermBridgeKitTerminalController
+    private let controller: TerminiTerminalController
     private var eventLoopGroup: NIOTSEventLoopGroup?
     private var connectionChannel: Channel?
     private var shellChannel: Channel?
@@ -66,7 +66,7 @@ public final class TermBridgeKitSSHSession {
     private var terminalPixelWidth = 0
     private var terminalPixelHeight = 0
 
-    public init(controller: TermBridgeKitTerminalController) {
+    public init(controller: TerminiTerminalController) {
         self.controller = controller
         controller.onInputText = { [weak self] text in
             self?.send(self?.normalizeInput(text) ?? text)
@@ -85,7 +85,7 @@ public final class TermBridgeKitSSHSession {
         eventLoopGroup?.shutdownGracefully(queue: .global()) { _ in }
     }
 
-    public func connect(configuration: TermBridgeKitSSHConfiguration) async {
+    public func connect(configuration: TerminiSSHConfiguration) async {
         await disconnect()
 
         let host = configuration.host.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -120,7 +120,7 @@ public final class TermBridgeKitSSHSession {
         endpointLabel = "\(username)@\(host):\(configuration.port)"
         status = .connecting
         resetTerminalSurface()
-        appendStatusLine("[TermBridgeKit] Connecting to \(endpointLabel)")
+        appendStatusLine("[Termini] Connecting to \(endpointLabel)")
 
         let eventLoopGroup = NIOTSEventLoopGroup()
         self.eventLoopGroup = eventLoopGroup
@@ -137,7 +137,7 @@ public final class TermBridgeKitSSHSession {
             pinnedFingerprint: hostKeyFingerprint,
             onNote: { [weak self] (note: String) in
                 Task { @MainActor [weak self] in
-                    self?.appendStatusLine("[TermBridgeKit] \(note)")
+                    self?.appendStatusLine("[Termini] \(note)")
                 }
             }
         )
@@ -150,7 +150,7 @@ public final class TermBridgeKitSSHSession {
             Task { @MainActor [weak self] in
                 guard let self else { return }
                 self.status = .connected
-                self.appendStatusLine("[TermBridgeKit] Connected")
+                self.appendStatusLine("[Termini] Connected")
 
                 guard let startupCommand, !startupCommand.isEmpty else { return }
                 try? await Task.sleep(for: .milliseconds(180))
@@ -266,7 +266,7 @@ public final class TermBridgeKitSSHSession {
         status = .disconnected
     }
 
-    public func updateTerminalSize(_ size: TermBridgeKitTerminalSize) {
+    public func updateTerminalSize(_ size: TerminiTerminalSize) {
         resize(
             columns: size.columns,
             rows: size.rows,
@@ -305,16 +305,16 @@ public final class TermBridgeKitSSHSession {
 
     private func handleRemoteExit(_ code: Int?) {
         if let code {
-            appendStatusLine("[TermBridgeKit] Remote shell exited with status \(code)")
+            appendStatusLine("[Termini] Remote shell exited with status \(code)")
         } else {
-            appendStatusLine("[TermBridgeKit] Remote shell closed")
+            appendStatusLine("[Termini] Remote shell closed")
         }
         status = .disconnected
     }
 
     private func handleConnectionError(_ error: Error) async {
         let message = error.localizedDescription
-        appendStatusLine("[TermBridgeKit] SSH error: \(message)")
+        appendStatusLine("[Termini] SSH error: \(message)")
         status = .failed(message)
         await disconnect()
         status = .failed(message)
@@ -420,7 +420,7 @@ public final class TermBridgeKitSSHSession {
     }
 }
 
-extension TermBridgeKitSSHSession {
+extension TerminiSSHSession {
     private enum SessionError: LocalizedError {
         case invalidChannelType
         case invalidPrivateKey
@@ -486,17 +486,17 @@ extension TermBridgeKitSSHSession {
     private final class HostKeyValidator: NIOSSHClientServerAuthenticationDelegate, @unchecked Sendable {
         private let host: String
         private let port: Int
-        private let policy: TermBridgeKitSSHHostKeyPolicy
+        private let policy: TerminiSSHHostKeyPolicy
         private let pinnedFingerprint: String?
-        private let store: TermBridgeKitSSHKnownHostsStore
+        private let store: TerminiSSHKnownHostsStore
         private let onNote: (@Sendable (String) -> Void)?
 
         init(
             host: String,
             port: Int,
-            policy: TermBridgeKitSSHHostKeyPolicy,
+            policy: TerminiSSHHostKeyPolicy,
             pinnedFingerprint: String?,
-            store: TermBridgeKitSSHKnownHostsStore = .shared,
+            store: TerminiSSHKnownHostsStore = .shared,
             onNote: (@Sendable (String) -> Void)? = nil
         ) {
             self.host = host
@@ -512,7 +512,7 @@ extension TermBridgeKitSSHSession {
             validationCompletePromise: EventLoopPromise<Void>
         ) {
             do {
-                let presentedKey = try TermBridgeKitKnownHostKey(hostKey: hostKey)
+                let presentedKey = try TerminiKnownHostKey(hostKey: hostKey)
                 let result = try store.validate(
                     presentedKey: presentedKey,
                     host: host,

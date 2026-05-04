@@ -1,10 +1,10 @@
 import Foundation
 import GhosttyKit
 
-enum TermBridgeKitGhosttyConfigFactory {
+enum TerminiGhosttyConfigFactory {
     static func makeConfig(
         baseConfig: ghostty_config_t?,
-        appearance: TermBridgeKitTerminalAppearance
+        appearance: TerminiTerminalAppearance
     ) -> ghostty_config_t? {
         guard let baseConfig, let config = ghostty_config_clone(baseConfig) else {
             return nil
@@ -31,7 +31,7 @@ enum TermBridgeKitGhosttyConfigFactory {
     }
 }
 
-extension TermBridgeKitTerminalAppearance {
+extension TerminiTerminalAppearance {
     var clampedGhosttyFontSize: Double? {
         fontSize.map { min(max($0, 1), 255) }
     }

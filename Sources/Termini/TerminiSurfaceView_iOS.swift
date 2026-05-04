@@ -5,15 +5,15 @@ import UIKit
 import GhosttyKit
 
 /// SwiftUI wrapper that embeds the live Ghostty surface on iOS.
-public struct TermBridgeKitSurfaceView: UIViewRepresentable {
-    private let controller: TermBridgeKitTerminalController?
+public struct TerminiSurfaceView: UIViewRepresentable {
+    private let controller: TerminiTerminalController?
     private let showsSystemKeyboard: Bool
-    private let appearance: TermBridgeKitTerminalAppearance
+    private let appearance: TerminiTerminalAppearance
 
     public init(
-        controller: TermBridgeKitTerminalController? = nil,
+        controller: TerminiTerminalController? = nil,
         showsSystemKeyboard: Bool = true,
-        appearance: TermBridgeKitTerminalAppearance = .default
+        appearance: TerminiTerminalAppearance = .default
     ) {
         self.controller = controller
         self.showsSystemKeyboard = showsSystemKeyboard
@@ -21,7 +21,7 @@ public struct TermBridgeKitSurfaceView: UIViewRepresentable {
     }
 
     public init(
-        controller: TermBridgeKitTerminalController? = nil,
+        controller: TerminiTerminalController? = nil,
         showsSystemKeyboard: Bool = true,
         fontSize: Double? = nil
     ) {
@@ -49,11 +49,11 @@ public struct TermBridgeKitSurfaceView: UIViewRepresentable {
 
 /// UIView subclass that hosts the Ghostty surface and forwards basic iOS input.
 public final class SurfaceContainerView: UIView, UIKeyInput, UITextInputTraits, UIGestureRecognizerDelegate {
-    private let runtime: TermBridgeKitRuntime
+    private let runtime: TerminiRuntime
     private var surface: ghostty_surface_t?
     private var renderLink: CADisplayLink?
-    private weak var controller: TermBridgeKitTerminalController?
-    private var lastReportedSize: TermBridgeKitTerminalSize?
+    private weak var controller: TerminiTerminalController?
+    private var lastReportedSize: TerminiTerminalSize?
     private lazy var suppressedInputView = UIView(frame: .zero)
     private lazy var scrollPanGestureRecognizer: UIPanGestureRecognizer = {
         let recognizer = UIPanGestureRecognizer(target: self, action: #selector(handleScrollPan(_:)))
@@ -74,8 +74,8 @@ public final class SurfaceContainerView: UIView, UIKeyInput, UITextInputTraits, 
     public var smartDashesType: UITextSmartDashesType = .no
     public var smartInsertDeleteType: UITextSmartInsertDeleteType = .no
     public var enablesReturnKeyAutomatically: Bool = false
-    private var lastAppliedAppearance: TermBridgeKitTerminalAppearance = .default
-    public var terminalAppearance: TermBridgeKitTerminalAppearance = .default {
+    private var lastAppliedAppearance: TerminiTerminalAppearance = .default
+    public var terminalAppearance: TerminiTerminalAppearance = .default {
         didSet {
             guard oldValue != terminalAppearance else { return }
             updateBackgroundColor()
@@ -99,7 +99,7 @@ public final class SurfaceContainerView: UIView, UIKeyInput, UITextInputTraits, 
         CAMetalLayer.self
     }
 
-    init(runtime: TermBridgeKitRuntime) {
+    init(runtime: TerminiRuntime) {
         self.runtime = runtime
         // Ghostty expects a non-zero host view so its internal IOSurface layer can size itself.
         super.init(frame: CGRect(x: 0, y: 0, width: 800, height: 600))
@@ -259,7 +259,7 @@ public final class SurfaceContainerView: UIView, UIKeyInput, UITextInputTraits, 
         ghostty_surface_draw(surface)
     }
 
-    func bind(controller: TermBridgeKitTerminalController?) {
+    func bind(controller: TerminiTerminalController?) {
         self.controller = controller
         controller?.bind(
             processRemoteOutput: { [weak self] data in
@@ -362,7 +362,7 @@ public final class SurfaceContainerView: UIView, UIKeyInput, UITextInputTraits, 
                 processRemoteOutput(Data(theme.applyEscapeSequence.utf8))
             } else if lastAppliedAppearance.theme != nil {
                 ghostty_surface_set_color_scheme(surface, ambientGhosttyColorScheme)
-                processRemoteOutput(Data(TermBridgeKitTerminalTheme.resetEscapeSequence.utf8))
+                processRemoteOutput(Data(TerminiTerminalTheme.resetEscapeSequence.utf8))
             } else if force {
                 ghostty_surface_set_color_scheme(surface, ambientGhosttyColorScheme)
             }
@@ -445,10 +445,10 @@ public final class SurfaceContainerView: UIView, UIKeyInput, UITextInputTraits, 
         }
     }
 
-    private func currentTerminalSize() -> TermBridgeKitTerminalSize? {
+    private func currentTerminalSize() -> TerminiTerminalSize? {
         guard let surface else { return nil }
         let size = ghostty_surface_size(surface)
-        return TermBridgeKitTerminalSize(
+        return TerminiTerminalSize(
             columns: Int(size.columns),
             rows: Int(size.rows),
             cellWidthPixels: Int(size.cell_width_px),
@@ -483,7 +483,7 @@ public final class SurfaceContainerView: UIView, UIKeyInput, UITextInputTraits, 
         controller?.reportDiagnosticsChanged(diagnostics)
     }
 
-    private func surfaceDiagnostics() -> TermBridgeKitSurfaceDiagnostics? {
+    private func surfaceDiagnostics() -> TerminiSurfaceDiagnostics? {
         let hostLayer = layer
         let sublayers = hostLayer.sublayers ?? []
 
@@ -509,7 +509,7 @@ public final class SurfaceContainerView: UIView, UIKeyInput, UITextInputTraits, 
             lines.append("grid unavailable")
         }
 
-        return TermBridgeKitSurfaceDiagnostics(lines: lines)
+        return TerminiSurfaceDiagnostics(lines: lines)
     }
 
     private func visibleTerminalText() -> String? {
@@ -595,7 +595,7 @@ public final class SurfaceContainerView: UIView, UIKeyInput, UITextInputTraits, 
     }
 }
 
-private extension TermBridgeKitTerminalTheme {
+private extension TerminiTerminalTheme {
     var ghosttyColorScheme: ghostty_color_scheme_e {
         switch colorScheme {
         case .dark:

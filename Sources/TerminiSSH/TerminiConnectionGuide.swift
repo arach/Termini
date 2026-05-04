@@ -1,7 +1,7 @@
-import TermBridgeKit
+import Termini
 import Foundation
 
-public struct TermBridgeKitConnectionGuide: Equatable, Sendable {
+public struct TerminiConnectionGuide: Equatable, Sendable {
     public struct Section: Identifiable, Equatable, Sendable {
         public let id: String
         public var title: String
@@ -56,7 +56,7 @@ public struct TermBridgeKitConnectionGuide: Equatable, Sendable {
                 id: "ship",
                 title: "Ship It In Another App",
                 items: [
-                    "Keep `TermBridgeKit` responsible for rendering, input, clipboard, and raw SSH.",
+                    "Keep `Termini` responsible for rendering, input, clipboard, and raw SSH.",
                     "Use the starter workspace for connection state, reconnection, status copy, and setup guidance.",
                     "Layer styling and product-specific pairing flows on top when your app is ready."
                 ]

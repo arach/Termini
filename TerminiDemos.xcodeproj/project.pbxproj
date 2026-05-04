@@ -8,15 +8,15 @@
 
 /* Begin PBXBuildFile section */
 		0CD83A783BFE2A0818EFAFB1 /* App.swift in Sources */ = {isa = PBXBuildFile; fileRef = 788AB1E0C88FA040AFDEC97A /* App.swift */; };
-		949CEB9552A4C75F056A9BB9 /* TermBridgeKit in Frameworks */ = {isa = PBXBuildFile; productRef = 3BA0B5EC6777A62DF7542D39 /* TermBridgeKit */; };
+		949CEB9552A4C75F056A9BB9 /* Termini in Frameworks */ = {isa = PBXBuildFile; productRef = 3BA0B5EC6777A62DF7542D39 /* Termini */; };
 		AD26EB197312BAC98F259F7D /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 369508C2285280B5A916CD38 /* ContentView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
 		369508C2285280B5A916CD38 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
-		5757319F39339645407B55E1 /* TermBridgeKit */ = {isa = PBXFileReference; lastKnownFileType = folder; name = TermBridgeKit; path = .; sourceTree = SOURCE_ROOT; };
+		5757319F39339645407B55E1 /* Termini */ = {isa = PBXFileReference; lastKnownFileType = folder; name = Termini; path = .; sourceTree = SOURCE_ROOT; };
 		788AB1E0C88FA040AFDEC97A /* App.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = App.swift; sourceTree = "<group>"; };
-		9C76DFE4F7EB574B2A710A86 /* TermBridgeKitIOSDemo.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = TermBridgeKitIOSDemo.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		9C76DFE4F7EB574B2A710A86 /* TerminiIOSDemo.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = TerminiIOSDemo.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -24,27 +24,27 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				949CEB9552A4C75F056A9BB9 /* TermBridgeKit in Frameworks */,
+				949CEB9552A4C75F056A9BB9 /* Termini in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
-		4D0A57491C5E03F5104939E1 /* TermBridgeKitIOSDemo */ = {
+		4D0A57491C5E03F5104939E1 /* TerminiIOSDemo */ = {
 			isa = PBXGroup;
 			children = (
 				788AB1E0C88FA040AFDEC97A /* App.swift */,
 				369508C2285280B5A916CD38 /* ContentView.swift */,
 			);
-			name = TermBridgeKitIOSDemo;
-			path = Examples/TermBridgeKitIOSDemo;
+			name = TerminiIOSDemo;
+			path = Examples/TerminiIOSDemo;
 			sourceTree = "<group>";
 		};
 		7FE5612A63A81962776E84E0 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				9C76DFE4F7EB574B2A710A86 /* TermBridgeKitIOSDemo.app */,
+				9C76DFE4F7EB574B2A710A86 /* TerminiIOSDemo.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -52,7 +52,7 @@
 		9B4A350C3BAA473B43D1D333 /* Packages */ = {
 			isa = PBXGroup;
 			children = (
-				5757319F39339645407B55E1 /* TermBridgeKit */,
+				5757319F39339645407B55E1 /* Termini */,
 			);
 			name = Packages;
 			sourceTree = "<group>";
@@ -61,7 +61,7 @@
 			isa = PBXGroup;
 			children = (
 				9B4A350C3BAA473B43D1D333 /* Packages */,
-				4D0A57491C5E03F5104939E1 /* TermBridgeKitIOSDemo */,
+				4D0A57491C5E03F5104939E1 /* TerminiIOSDemo */,
 				7FE5612A63A81962776E84E0 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -69,9 +69,9 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		9DC5AD78FBDFCA80A5DB2C3C /* TermBridgeKitIOSDemo */ = {
+		9DC5AD78FBDFCA80A5DB2C3C /* TerminiIOSDemo */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = B52B060D2D801A514FE55056 /* Build configuration list for PBXNativeTarget "TermBridgeKitIOSDemo" */;
+			buildConfigurationList = B52B060D2D801A514FE55056 /* Build configuration list for PBXNativeTarget "TerminiIOSDemo" */;
 			buildPhases = (
 				80886EA059ED18B24A87ABBF /* Sources */,
 				4F21DF2ED98C3232C8B34A5B /* Frameworks */,
@@ -80,12 +80,12 @@
 			);
 			dependencies = (
 			);
-			name = TermBridgeKitIOSDemo;
+			name = TerminiIOSDemo;
 			packageProductDependencies = (
-				3BA0B5EC6777A62DF7542D39 /* TermBridgeKit */,
+				3BA0B5EC6777A62DF7542D39 /* Termini */,
 			);
-			productName = TermBridgeKitIOSDemo;
-			productReference = 9C76DFE4F7EB574B2A710A86 /* TermBridgeKitIOSDemo.app */;
+			productName = TerminiIOSDemo;
+			productReference = 9C76DFE4F7EB574B2A710A86 /* TerminiIOSDemo.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
@@ -103,7 +103,7 @@
 					};
 				};
 			};
-			buildConfigurationList = 70129C55DC6CA75D65F84D39 /* Build configuration list for PBXProject "TermBridgeKitDemos" */;
+			buildConfigurationList = 70129C55DC6CA75D65F84D39 /* Build configuration list for PBXProject "TerminiDemos" */;
 			compatibilityVersion = "Xcode 14.0";
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
@@ -120,7 +120,7 @@
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				9DC5AD78FBDFCA80A5DB2C3C /* TermBridgeKitIOSDemo */,
+				9DC5AD78FBDFCA80A5DB2C3C /* TerminiIOSDemo */,
 			);
 		};
 /* End PBXProject section */
@@ -208,8 +208,8 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.arach.TermBridgeKitIOSDemo;
-				PRODUCT_NAME = TermBridgeKitIOSDemo;
+				PRODUCT_BUNDLE_IDENTIFIER = com.arach.TerminiIOSDemo;
+				PRODUCT_NAME = TerminiIOSDemo;
 				SDKROOT = iphoneos;
 				SUPPORTS_MACCATALYST = NO;
 				SWIFT_VERSION = 5.9;
@@ -232,8 +232,8 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.arach.TermBridgeKitIOSDemo;
-				PRODUCT_NAME = TermBridgeKitIOSDemo;
+				PRODUCT_BUNDLE_IDENTIFIER = com.arach.TerminiIOSDemo;
+				PRODUCT_NAME = TerminiIOSDemo;
 				SDKROOT = iphoneos;
 				SUPPORTS_MACCATALYST = NO;
 				SWIFT_VERSION = 5.9;
@@ -306,7 +306,7 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		70129C55DC6CA75D65F84D39 /* Build configuration list for PBXProject "TermBridgeKitDemos" */ = {
+		70129C55DC6CA75D65F84D39 /* Build configuration list for PBXProject "TerminiDemos" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				C1FBCADE943BD06A4AC3E571 /* Debug */,
@@ -315,7 +315,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;
 		};
-		B52B060D2D801A514FE55056 /* Build configuration list for PBXNativeTarget "TermBridgeKitIOSDemo" */ = {
+		B52B060D2D801A514FE55056 /* Build configuration list for PBXNativeTarget "TerminiIOSDemo" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				8E5B09CE5883E5A377B67E28 /* Debug */,
@@ -334,9 +334,9 @@
 /* End XCLocalSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
-		3BA0B5EC6777A62DF7542D39 /* TermBridgeKit */ = {
+		3BA0B5EC6777A62DF7542D39 /* Termini */ = {
 			isa = XCSwiftPackageProductDependency;
-			productName = TermBridgeKit;
+			productName = Termini;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

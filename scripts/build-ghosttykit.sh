@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Build GhosttyKit.xcframework from a local Ghostty checkout and install it
-# into TermBridgeKit's vendored path.
+# into Termini's vendored path.
 
 set -euo pipefail
 

@@ -1,13 +1,13 @@
 import Foundation
 
-public enum TermBridgeKitTerminalColorScheme: String, CaseIterable, Codable, Identifiable, Sendable {
+public enum TerminiTerminalColorScheme: String, CaseIterable, Codable, Identifiable, Sendable {
     case dark
     case light
 
     public var id: Self { self }
 }
 
-public struct TermBridgeKitTerminalColor: Hashable, Codable, Sendable {
+public struct TerminiTerminalColor: Hashable, Codable, Sendable {
     public var red: UInt8
     public var green: UInt8
     public var blue: UInt8
@@ -33,27 +33,27 @@ public struct TermBridgeKitTerminalColor: Hashable, Codable, Sendable {
     }
 }
 
-public struct TermBridgeKitTerminalTheme: Hashable, Codable, Sendable, Identifiable {
+public struct TerminiTerminalTheme: Hashable, Codable, Sendable, Identifiable {
     public var id: String
     public var name: String
-    public var colorScheme: TermBridgeKitTerminalColorScheme
-    public var background: TermBridgeKitTerminalColor
-    public var foreground: TermBridgeKitTerminalColor
-    public var cursor: TermBridgeKitTerminalColor
-    public var selectionBackground: TermBridgeKitTerminalColor?
-    public var selectionForeground: TermBridgeKitTerminalColor?
-    public var ansiPalette: [TermBridgeKitTerminalColor]
+    public var colorScheme: TerminiTerminalColorScheme
+    public var background: TerminiTerminalColor
+    public var foreground: TerminiTerminalColor
+    public var cursor: TerminiTerminalColor
+    public var selectionBackground: TerminiTerminalColor?
+    public var selectionForeground: TerminiTerminalColor?
+    public var ansiPalette: [TerminiTerminalColor]
 
     public init(
         id: String,
         name: String,
-        colorScheme: TermBridgeKitTerminalColorScheme,
-        background: TermBridgeKitTerminalColor,
-        foreground: TermBridgeKitTerminalColor,
-        cursor: TermBridgeKitTerminalColor,
-        selectionBackground: TermBridgeKitTerminalColor? = nil,
-        selectionForeground: TermBridgeKitTerminalColor? = nil,
-        ansiPalette: [TermBridgeKitTerminalColor]
+        colorScheme: TerminiTerminalColorScheme,
+        background: TerminiTerminalColor,
+        foreground: TerminiTerminalColor,
+        cursor: TerminiTerminalColor,
+        selectionBackground: TerminiTerminalColor? = nil,
+        selectionForeground: TerminiTerminalColor? = nil,
+        ansiPalette: [TerminiTerminalColor]
     ) {
         precondition(ansiPalette.count == 16, "Ghostty themes require a 16-color ANSI palette.")
         self.id = id
@@ -67,7 +67,7 @@ public struct TermBridgeKitTerminalTheme: Hashable, Codable, Sendable, Identifia
         self.ansiPalette = ansiPalette
     }
 
-    public static let midnightBloom = TermBridgeKitTerminalTheme(
+    public static let midnightBloom = TerminiTerminalTheme(
         id: "midnight-bloom",
         name: "Midnight Bloom",
         colorScheme: .dark,
@@ -84,7 +84,7 @@ public struct TermBridgeKitTerminalTheme: Hashable, Codable, Sendable, Identifia
         ]
     )
 
-    public static let emberGlow = TermBridgeKitTerminalTheme(
+    public static let emberGlow = TerminiTerminalTheme(
         id: "ember-glow",
         name: "Ember Glow",
         colorScheme: .dark,
@@ -101,7 +101,7 @@ public struct TermBridgeKitTerminalTheme: Hashable, Codable, Sendable, Identifia
         ]
     )
 
-    public static let jadeNight = TermBridgeKitTerminalTheme(
+    public static let jadeNight = TerminiTerminalTheme(
         id: "jade-night",
         name: "Jade Night",
         colorScheme: .dark,
@@ -118,7 +118,7 @@ public struct TermBridgeKitTerminalTheme: Hashable, Codable, Sendable, Identifia
         ]
     )
 
-    public static let paperLantern = TermBridgeKitTerminalTheme(
+    public static let paperLantern = TerminiTerminalTheme(
         id: "paper-lantern",
         name: "Paper Lantern",
         colorScheme: .light,
@@ -135,7 +135,7 @@ public struct TermBridgeKitTerminalTheme: Hashable, Codable, Sendable, Identifia
         ]
     )
 
-    public static let blueprint = TermBridgeKitTerminalTheme(
+    public static let blueprint = TerminiTerminalTheme(
         id: "blueprint",
         name: "Blueprint",
         colorScheme: .light,
@@ -152,7 +152,7 @@ public struct TermBridgeKitTerminalTheme: Hashable, Codable, Sendable, Identifia
         ]
     )
 
-    public static let presets: [TermBridgeKitTerminalTheme] = [
+    public static let presets: [TerminiTerminalTheme] = [
         .midnightBloom,
         .emberGlow,
         .jadeNight,
@@ -193,12 +193,12 @@ public struct TermBridgeKitTerminalTheme: Hashable, Codable, Sendable, Identifia
         ].joined()
     }
 
-    private func osc(command: Int, color: TermBridgeKitTerminalColor) -> String {
+    private func osc(command: Int, color: TerminiTerminalColor) -> String {
         "\u{1B}]\(command);\(color.ghosttyRGBSequenceFragment)\u{07}"
     }
 }
 
-public struct TermBridgeKitTerminalFontFamily: Hashable, Codable, Sendable, Identifiable, ExpressibleByStringLiteral {
+public struct TerminiTerminalFontFamily: Hashable, Codable, Sendable, Identifiable, ExpressibleByStringLiteral {
     public var name: String
 
     public var id: String { name }
@@ -212,20 +212,20 @@ public struct TermBridgeKitTerminalFontFamily: Hashable, Codable, Sendable, Iden
     }
 }
 
-public struct TermBridgeKitTerminalAppearance: Hashable, Codable, Sendable {
-    public var theme: TermBridgeKitTerminalTheme?
+public struct TerminiTerminalAppearance: Hashable, Codable, Sendable {
+    public var theme: TerminiTerminalTheme?
     public var fontSize: Double?
-    public var fontFamily: TermBridgeKitTerminalFontFamily?
+    public var fontFamily: TerminiTerminalFontFamily?
 
     public init(
-        theme: TermBridgeKitTerminalTheme? = nil,
+        theme: TerminiTerminalTheme? = nil,
         fontSize: Double? = nil,
-        fontFamily: TermBridgeKitTerminalFontFamily? = nil
+        fontFamily: TerminiTerminalFontFamily? = nil
     ) {
         self.theme = theme
         self.fontSize = fontSize
         self.fontFamily = fontFamily
     }
 
-    public static let `default` = TermBridgeKitTerminalAppearance()
+    public static let `default` = TerminiTerminalAppearance()
 }

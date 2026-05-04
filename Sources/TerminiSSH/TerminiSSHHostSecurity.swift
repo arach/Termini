@@ -1,9 +1,9 @@
-import TermBridgeKit
+import Termini
 import CryptoKit
 import Foundation
 @preconcurrency import NIOSSH
 
-public enum TermBridgeKitSSHHostKeyPolicy: String, CaseIterable, Codable, Sendable {
+public enum TerminiSSHHostKeyPolicy: String, CaseIterable, Codable, Sendable {
     case trustOnFirstUse
     case requireStoredHostKey
     case acceptAny
@@ -31,7 +31,7 @@ public enum TermBridgeKitSSHHostKeyPolicy: String, CaseIterable, Codable, Sendab
     }
 }
 
-struct TermBridgeKitKnownHostKey: Equatable, Sendable {
+struct TerminiKnownHostKey: Equatable, Sendable {
     let algorithm: String
     let openSSHPublicKey: String
     let fingerprint: String
@@ -42,7 +42,7 @@ struct TermBridgeKitKnownHostKey: Equatable, Sendable {
 
         guard components.count >= 2,
               let rawKey = Data(base64Encoded: String(components[1])) else {
-            throw TermBridgeKitSSHHostKeyValidationError.invalidHostKey
+            throw TerminiSSHHostKeyValidationError.invalidHostKey
         }
 
         let digest = SHA256.hash(data: rawKey)
@@ -54,7 +54,7 @@ struct TermBridgeKitKnownHostKey: Equatable, Sendable {
     }
 }
 
-enum TermBridgeKitSSHHostKeyValidationError: LocalizedError, Equatable, Sendable {
+enum TerminiSSHHostKeyValidationError: LocalizedError, Equatable, Sendable {
     case invalidHostKey
     case unknownHost(host: String, port: Int, fingerprint: String)
     case changedHostKey(host: String, port: Int, expected: String, presented: String)
@@ -74,7 +74,7 @@ enum TermBridgeKitSSHHostKeyValidationError: LocalizedError, Equatable, Sendable
     }
 }
 
-final class TermBridgeKitSSHKnownHostsStore: @unchecked Sendable {
+final class TerminiSSHKnownHostsStore: @unchecked Sendable {
     struct Entry: Codable, Equatable, Sendable {
         let host: String
         let port: Int
@@ -94,7 +94,7 @@ final class TermBridgeKitSSHKnownHostsStore: @unchecked Sendable {
         case bypassed
     }
 
-    static let shared = TermBridgeKitSSHKnownHostsStore()
+    static let shared = TerminiSSHKnownHostsStore()
 
     private let userDefaults: UserDefaults
     private let storageKey: String
@@ -102,7 +102,7 @@ final class TermBridgeKitSSHKnownHostsStore: @unchecked Sendable {
 
     init(
         userDefaults: UserDefaults = .standard,
-        storageKey: String = "TermBridgeKit.SSHKnownHosts"
+        storageKey: String = "Termini.SSHKnownHosts"
     ) {
         self.userDefaults = userDefaults
         self.storageKey = storageKey
@@ -116,10 +116,10 @@ final class TermBridgeKitSSHKnownHostsStore: @unchecked Sendable {
 
     @discardableResult
     func validate(
-        presentedKey: TermBridgeKitKnownHostKey,
+        presentedKey: TerminiKnownHostKey,
         host: String,
         port: Int,
-        policy: TermBridgeKitSSHHostKeyPolicy,
+        policy: TerminiSSHHostKeyPolicy,
         pinnedFingerprint: String?
     ) throws -> ValidationResult {
         let normalizedHost = normalizeHost(host)
@@ -127,7 +127,7 @@ final class TermBridgeKitSSHKnownHostsStore: @unchecked Sendable {
 
         if let normalizedPinnedFingerprint {
             guard normalizedPinnedFingerprint == presentedKey.fingerprint else {
-                throw TermBridgeKitSSHHostKeyValidationError.fingerprintMismatch(
+                throw TerminiSSHHostKeyValidationError.fingerprintMismatch(
                     expected: normalizedPinnedFingerprint,
                     presented: presentedKey.fingerprint
                 )
@@ -156,7 +156,7 @@ final class TermBridgeKitSSHKnownHostsStore: @unchecked Sendable {
     }
 
     private func validateExistingHost(
-        presentedKey: TermBridgeKitKnownHostKey,
+        presentedKey: TerminiKnownHostKey,
         host: String,
         port: Int,
         allowTrustOnFirstUse: Bool
@@ -169,7 +169,7 @@ final class TermBridgeKitSSHKnownHostsStore: @unchecked Sendable {
 
         if var existing = entries[key] {
             guard existing.fingerprint == presentedKey.fingerprint else {
-                throw TermBridgeKitSSHHostKeyValidationError.changedHostKey(
+                throw TerminiSSHHostKeyValidationError.changedHostKey(
                     host: host,
                     port: port,
                     expected: existing.fingerprint,
@@ -184,7 +184,7 @@ final class TermBridgeKitSSHKnownHostsStore: @unchecked Sendable {
         }
 
         guard allowTrustOnFirstUse else {
-            throw TermBridgeKitSSHHostKeyValidationError.unknownHost(
+            throw TerminiSSHHostKeyValidationError.unknownHost(
                 host: host,
                 port: port,
                 fingerprint: presentedKey.fingerprint

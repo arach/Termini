@@ -1,8 +1,8 @@
 import SwiftUI
-import TermBridgeKit
+import Termini
 
 @main
-struct TermBridgeKitIOSDemoApp: App {
+struct TerminiIOSDemoApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView()

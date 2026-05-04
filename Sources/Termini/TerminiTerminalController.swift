@@ -1,6 +1,6 @@
 import Foundation
 
-public struct TermBridgeKitTerminalSize: Equatable, Sendable {
+public struct TerminiTerminalSize: Equatable, Sendable {
     public let columns: Int
     public let rows: Int
     public let cellWidthPixels: Int
@@ -19,7 +19,7 @@ public struct TermBridgeKitTerminalSize: Equatable, Sendable {
     }
 }
 
-public struct TermBridgeKitSurfaceDiagnostics: Equatable, Sendable {
+public struct TerminiSurfaceDiagnostics: Equatable, Sendable {
     public let lines: [String]
 
     public init(lines: [String]) {
@@ -32,16 +32,16 @@ public struct TermBridgeKitSurfaceDiagnostics: Equatable, Sendable {
 }
 
 @MainActor
-public final class TermBridgeKitTerminalController {
+public final class TerminiTerminalController {
     private var processRemoteOutputImpl: ((Data) -> Void)?
     private var focusImpl: (() -> Void)?
     private var blurImpl: (() -> Void)?
-    private var currentSizeImpl: (() -> TermBridgeKitTerminalSize?)?
+    private var currentSizeImpl: (() -> TerminiTerminalSize?)?
     private var visibleTextImpl: (() -> String?)?
-    private var diagnosticsImpl: (() -> TermBridgeKitSurfaceDiagnostics?)?
+    private var diagnosticsImpl: (() -> TerminiSurfaceDiagnostics?)?
     private var pendingOutputChunks: [Data] = []
-    private var latestSize: TermBridgeKitTerminalSize?
-    private var latestDiagnostics: TermBridgeKitSurfaceDiagnostics?
+    private var latestSize: TerminiTerminalSize?
+    private var latestDiagnostics: TerminiSurfaceDiagnostics?
     private var isSizeNotificationScheduled = false
     private var isDiagnosticsNotificationScheduled = false
 
@@ -49,13 +49,13 @@ public final class TermBridgeKitTerminalController {
     public var onDeleteBackward: (() -> Void)?
     public var onTransportWrite: ((Data) -> Void)?
 
-    public var onSizeChange: ((TermBridgeKitTerminalSize) -> Void)? {
+    public var onSizeChange: ((TerminiTerminalSize) -> Void)? {
         didSet {
             scheduleSizeNotificationIfNeeded()
         }
     }
 
-    public var onDiagnosticsChange: ((TermBridgeKitSurfaceDiagnostics) -> Void)? {
+    public var onDiagnosticsChange: ((TerminiSurfaceDiagnostics) -> Void)? {
         didSet {
             scheduleDiagnosticsNotificationIfNeeded()
         }
@@ -81,7 +81,7 @@ public final class TermBridgeKitTerminalController {
         blurImpl?()
     }
 
-    public func currentSize() -> TermBridgeKitTerminalSize? {
+    public func currentSize() -> TerminiTerminalSize? {
         currentSizeImpl?()
     }
 
@@ -89,7 +89,7 @@ public final class TermBridgeKitTerminalController {
         visibleTextImpl?()
     }
 
-    public func diagnostics() -> TermBridgeKitSurfaceDiagnostics? {
+    public func diagnostics() -> TerminiSurfaceDiagnostics? {
         diagnosticsImpl?()
     }
 
@@ -97,9 +97,9 @@ public final class TermBridgeKitTerminalController {
         processRemoteOutput: @escaping (Data) -> Void,
         focus: @escaping () -> Void,
         blur: @escaping () -> Void,
-        currentSize: @escaping () -> TermBridgeKitTerminalSize?,
+        currentSize: @escaping () -> TerminiTerminalSize?,
         visibleText: @escaping () -> String?,
-        diagnostics: @escaping () -> TermBridgeKitSurfaceDiagnostics?
+        diagnostics: @escaping () -> TerminiSurfaceDiagnostics?
     ) {
         processRemoteOutputImpl = processRemoteOutput
         focusImpl = focus
@@ -126,12 +126,12 @@ public final class TermBridgeKitTerminalController {
         }
     }
 
-    func reportSizeChanged(_ size: TermBridgeKitTerminalSize) {
+    func reportSizeChanged(_ size: TerminiTerminalSize) {
         latestSize = size
         scheduleSizeNotificationIfNeeded()
     }
 
-    func reportDiagnosticsChanged(_ diagnostics: TermBridgeKitSurfaceDiagnostics) {
+    func reportDiagnosticsChanged(_ diagnostics: TerminiSurfaceDiagnostics) {
         latestDiagnostics = diagnostics
         scheduleDiagnosticsNotificationIfNeeded()
     }

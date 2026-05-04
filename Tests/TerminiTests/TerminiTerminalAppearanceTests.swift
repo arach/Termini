@@ -1,8 +1,8 @@
 import XCTest
 import GhosttyKit
-@testable import TermBridgeKit
+@testable import Termini
 
-final class TermBridgeKitTerminalAppearanceTests: XCTestCase {
+final class TerminiTerminalAppearanceTests: XCTestCase {
     private enum GhosttyTestBootstrap {
         static let initializeResult: Int32 = ghostty_init(0, nil)
     }
@@ -35,13 +35,13 @@ final class TermBridgeKitTerminalAppearanceTests: XCTestCase {
     }
 
     func testPresetThemesShipWithCompleteAnsiPalettes() {
-        for theme in TermBridgeKitTerminalTheme.presets {
+        for theme in TerminiTerminalTheme.presets {
             XCTAssertEqual(theme.ansiPalette.count, 16, "\(theme.name) should expose a full ANSI palette.")
         }
     }
 
     func testApplyEscapeSequenceIncludesCoreDynamicColorsAndAnsiPalette() {
-        let theme = TermBridgeKitTerminalTheme.midnightBloom
+        let theme = TerminiTerminalTheme.midnightBloom
         let sequence = theme.applyEscapeSequence
 
         XCTAssertTrue(sequence.contains("\u{1B}]10;rgb:E6E6/EDED/F7F7\u{07}"))
@@ -52,7 +52,7 @@ final class TermBridgeKitTerminalAppearanceTests: XCTestCase {
 
     func testResetEscapeSequenceResetsDynamicColorsAndPalette() {
         XCTAssertEqual(
-            TermBridgeKitTerminalTheme.resetEscapeSequence,
+            TerminiTerminalTheme.resetEscapeSequence,
             "\u{1B}]104\u{07}\u{1B}]110\u{07}\u{1B}]111\u{07}\u{1B}]112\u{07}\u{1B}]117\u{07}\u{1B}]119\u{07}"
         )
     }
@@ -61,7 +61,7 @@ final class TermBridgeKitTerminalAppearanceTests: XCTestCase {
         let baseConfig = makeBaseConfig()
         defer { ghostty_config_free(baseConfig) }
 
-        let config = TermBridgeKitGhosttyConfigFactory.makeConfig(
+        let config = TerminiGhosttyConfigFactory.makeConfig(
             baseConfig: baseConfig,
             appearance: .init(
                 fontSize: 18,
@@ -84,7 +84,7 @@ final class TermBridgeKitTerminalAppearanceTests: XCTestCase {
         }
         ghostty_config_finalize(baseConfig)
 
-        let customConfig = TermBridgeKitGhosttyConfigFactory.makeConfig(
+        let customConfig = TerminiGhosttyConfigFactory.makeConfig(
             baseConfig: baseConfig,
             appearance: .init(
                 fontSize: 20,
@@ -96,7 +96,7 @@ final class TermBridgeKitTerminalAppearanceTests: XCTestCase {
         XCTAssertEqual(fontSize(from: customConfig), 20)
         XCTAssertEqual(fontFamilies(from: customConfig), ["SF Mono"])
 
-        let ambientConfig = TermBridgeKitGhosttyConfigFactory.makeConfig(
+        let ambientConfig = TerminiGhosttyConfigFactory.makeConfig(
             baseConfig: baseConfig,
             appearance: .default
         )
@@ -110,7 +110,7 @@ final class TermBridgeKitTerminalAppearanceTests: XCTestCase {
         let baseConfig = makeBaseConfig()
         defer { ghostty_config_free(baseConfig) }
 
-        let config = TermBridgeKitGhosttyConfigFactory.makeConfig(
+        let config = TerminiGhosttyConfigFactory.makeConfig(
             baseConfig: baseConfig,
             appearance: .init(fontFamily: .init(name: "   "))
         )

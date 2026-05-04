@@ -1,7 +1,7 @@
-import TermBridgeKit
+import Termini
 import Foundation
 
-public struct TermBridgeKitConnectionConfig: Codable, Equatable, Sendable {
+public struct TerminiConnectionConfig: Codable, Equatable, Sendable {
     private enum CodingKeys: String, CodingKey {
         case name
         case host
@@ -50,7 +50,7 @@ public struct TermBridgeKitConnectionConfig: Codable, Equatable, Sendable {
     public var privateKeyPEM: String
     public var term: String
     public var startupCommand: String
-    public var hostKeyPolicy: TermBridgeKitSSHHostKeyPolicy
+    public var hostKeyPolicy: TerminiSSHHostKeyPolicy
     public var hostKeyFingerprint: String
 
     public init(
@@ -63,7 +63,7 @@ public struct TermBridgeKitConnectionConfig: Codable, Equatable, Sendable {
         privateKeyPEM: String = "",
         term: String = "xterm-256color",
         startupCommand: String = "",
-        hostKeyPolicy: TermBridgeKitSSHHostKeyPolicy = .trustOnFirstUse,
+        hostKeyPolicy: TerminiSSHHostKeyPolicy = .trustOnFirstUse,
         hostKeyFingerprint: String = ""
     ) {
         self.name = name
@@ -91,7 +91,7 @@ public struct TermBridgeKitConnectionConfig: Codable, Equatable, Sendable {
         self.privateKeyPEM = try container.decodeIfPresent(String.self, forKey: .privateKeyPEM) ?? ""
         self.term = try container.decodeIfPresent(String.self, forKey: .term) ?? "xterm-256color"
         self.startupCommand = try container.decodeIfPresent(String.self, forKey: .startupCommand) ?? ""
-        self.hostKeyPolicy = try container.decodeIfPresent(TermBridgeKitSSHHostKeyPolicy.self, forKey: .hostKeyPolicy) ?? .trustOnFirstUse
+        self.hostKeyPolicy = try container.decodeIfPresent(TerminiSSHHostKeyPolicy.self, forKey: .hostKeyPolicy) ?? .trustOnFirstUse
         self.hostKeyFingerprint = try container.decodeIfPresent(String.self, forKey: .hostKeyFingerprint) ?? ""
     }
 
@@ -170,10 +170,10 @@ public struct TermBridgeKitConnectionConfig: Codable, Equatable, Sendable {
         validationError == nil
     }
 
-    public func resolvedSSHConfiguration() -> TermBridgeKitSSHConfiguration? {
+    public func resolvedSSHConfiguration() -> TerminiSSHConfiguration? {
         guard validationError == nil else { return nil }
 
-        return TermBridgeKitSSHConfiguration(
+        return TerminiSSHConfiguration(
             host: host.trimmingCharacters(in: .whitespacesAndNewlines),
             port: port,
             username: username.trimmingCharacters(in: .whitespacesAndNewlines),
@@ -203,7 +203,7 @@ public struct TermBridgeKitConnectionConfig: Codable, Equatable, Sendable {
             return nil
         }
 
-        let hostKeyPolicy = TermBridgeKitSSHHostKeyPolicy(
+        let hostKeyPolicy = TerminiSSHHostKeyPolicy(
             rawValue: nonEmpty(environment["TERMBRIDGEKIT_SSH_HOST_KEY_POLICY"]) ?? ""
         ) ?? .trustOnFirstUse
 
