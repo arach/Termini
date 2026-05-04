@@ -1,5 +1,6 @@
 import SwiftUI
 import TermBridgeKit
+import TermBridgeKitSSH
 
 struct ContentView: View {
     @State private var workspace = TermBridgeKitSSHWorkspace(

@@ -1,3 +1,4 @@
+import TermBridgeKit
 import Foundation
 
 public struct TermBridgeKitConnectionGuide: Equatable, Sendable {

@@ -1,3 +1,4 @@
+import TermBridgeKit
 import Foundation
 import Observation
 

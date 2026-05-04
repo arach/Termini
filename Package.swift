@@ -31,6 +31,17 @@ let ghosttyKitTarget: Target =
         )
     }
 
+let terminalLinkerSettings: [LinkerSetting] = [
+    .linkedLibrary("c++"),
+    .linkedFramework("AppKit", .when(platforms: [.macOS])),
+    .linkedFramework("Carbon", .when(platforms: [.macOS])),
+    .linkedFramework("CoreGraphics"),
+    .linkedFramework("CoreText"),
+    .linkedFramework("Metal"),
+    .linkedFramework("UIKit", .when(platforms: [.iOS])),
+    .linkedFramework("QuartzCore", .when(platforms: [.iOS]))
+]
+
 let package = Package(
     name: "TermBridgeKit",
     platforms: [
@@ -41,6 +52,10 @@ let package = Package(
         .library(
             name: "TermBridgeKit",
             targets: ["TermBridgeKit"]
+        ),
+        .library(
+            name: "TermBridgeKitSSH",
+            targets: ["TermBridgeKitSSH"]
         ),
         .executable(
             name: "TermBridgeKitDemo",
@@ -57,20 +72,17 @@ let package = Package(
         .target(
             name: "TermBridgeKit",
             dependencies: [
-                "GhosttyKit",
+                "GhosttyKit"
+            ],
+            linkerSettings: terminalLinkerSettings
+        ),
+        .target(
+            name: "TermBridgeKitSSH",
+            dependencies: [
+                "TermBridgeKit",
                 .product(name: "NIOCore", package: "swift-nio"),
                 .product(name: "NIOSSH", package: "swift-nio-ssh"),
                 .product(name: "NIOTransportServices", package: "swift-nio-transport-services")
-            ],
-            linkerSettings: [
-                .linkedLibrary("c++"),
-                .linkedFramework("AppKit", .when(platforms: [.macOS])),
-                .linkedFramework("Carbon", .when(platforms: [.macOS])),
-                .linkedFramework("CoreGraphics"),
-                .linkedFramework("CoreText"),
-                .linkedFramework("Metal"),
-                .linkedFramework("UIKit", .when(platforms: [.iOS])),
-                .linkedFramework("QuartzCore", .when(platforms: [.iOS]))
             ]
         ),
         .executableTarget(
@@ -80,8 +92,12 @@ let package = Package(
         ),
         .testTarget(
             name: "TermBridgeKitTests",
+            dependencies: ["TermBridgeKit"]
+        ),
+        .testTarget(
+            name: "TermBridgeKitSSHTests",
             dependencies: [
-                "TermBridgeKit",
+                "TermBridgeKitSSH",
                 .product(name: "NIOSSH", package: "swift-nio-ssh")
             ]
         )

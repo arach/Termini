@@ -1,7 +1,7 @@
 import Foundation
 import NIOSSH
 import XCTest
-@testable import TermBridgeKit
+@testable import TermBridgeKitSSH
 
 final class TermBridgeKitSSHKnownHostsTests: XCTestCase {
     private let ed25519PublicKey =

@@ -1,3 +1,4 @@
+import TermBridgeKit
 import CryptoKit
 import Foundation
 import NIOCore

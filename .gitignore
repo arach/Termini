@@ -3,3 +3,5 @@
 .swiftpm
 dist/
 vendor/
+# OpenScout local state
+.openscout/project.json

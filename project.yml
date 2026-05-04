@@ -26,3 +26,5 @@ targets:
     dependencies:
       - package: TermBridgeKit
         product: TermBridgeKit
+      - package: TermBridgeKit
+        product: TermBridgeKitSSH
