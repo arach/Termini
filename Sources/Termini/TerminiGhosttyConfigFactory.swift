@@ -10,14 +10,22 @@ enum TerminiGhosttyConfigFactory {
             return nil
         }
 
-        // Runtime font customization (`ghostty_config_set_font_*`) is gated on
-        // GhosttyKit 0.1.3+. We currently pin to 0.1.2 because 0.1.3 has an
-        // iOS surface-attach regression. When 0.1.4 (or a fixed 0.1.3) lands,
-        // re-enable these calls — `appearance.fontSize` / `.fontFamily` are
-        // currently dropped on the floor, so callers get whatever the base
-        // ghostty config compiled in.
-        _ = appearance.clampedGhosttyFontSize
-        _ = appearance.normalizedFontFamilyName
+        if let fontSize = appearance.clampedGhosttyFontSize {
+            ghostty_config_set_font_size(config, Float(fontSize))
+        }
+
+        if let fontFamily = appearance.normalizedFontFamilyName {
+            let didSetFamily = fontFamily.withCString { value in
+                ghostty_config_set_font_family(config, value, UInt(fontFamily.utf8.count))
+            }
+
+            guard didSetFamily else {
+                ghostty_config_free(config)
+                return nil
+            }
+
+            ghostty_config_finalize(config)
+        }
 
         return config
     }
