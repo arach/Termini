@@ -3,10 +3,14 @@ import Foundation
 import PackageDescription
 
 let fileManager = FileManager.default
+// Prefer the directory containing *this* Package.swift so the local-vendor
+// preference works the same way whether Termini is built directly or as a
+// SwiftPM dependency of another package (where PWD/cwd point at the
+// consumer, not Termini).
 let packageRootCandidates = [
+    URL(fileURLWithPath: #filePath).deletingLastPathComponent(),
     ProcessInfo.processInfo.environment["PWD"].map(URL.init(fileURLWithPath:)),
     URL(fileURLWithPath: fileManager.currentDirectoryPath),
-    URL(fileURLWithPath: #filePath).deletingLastPathComponent()
 ].compactMap { $0 }
 let packageRoot = packageRootCandidates.first(where: {
     fileManager.fileExists(atPath: $0.appending(path: "Package.swift").path)
@@ -14,8 +18,16 @@ let packageRoot = packageRootCandidates.first(where: {
 let localGhosttyKitRelativePath = "vendor/ghostty/macos/GhosttyKit.xcframework"
 let localGhosttyKitAbsolutePath = packageRoot.appending(path: localGhosttyKitRelativePath).path
 let bundledGhosttyKitExists = fileManager.fileExists(atPath: localGhosttyKitAbsolutePath)
-let releaseGhosttyKitURL = "https://github.com/arach/TermBridgeKit/releases/download/0.1.3/GhosttyKit.xcframework.zip"
-let releaseGhosttyKitChecksum = "254f901b8fd1374791d5155bb0280d0b32addf54d477fcccbaafed418fee4bb3"
+// 0.1.5 fixes the iOS surface-attach regression that 0.1.3 introduced
+// (`addSublayer` selector sent to UIView; should be `addSublayer:` on
+// `UIView.layer`). The patched build uses the upstream Ghostty fix.
+//
+// Local development: drop the rebuilt xcframework into
+// `vendor/ghostty/macos/GhosttyKit.xcframework` and the local-vendor
+// preference above will use it. The URL below is consumed when no local
+// vendor is present (CI, downstream packages).
+let releaseGhosttyKitURL = "https://github.com/arach/TermBridgeKit/releases/download/0.1.5/GhosttyKit.xcframework.zip"
+let releaseGhosttyKitChecksum = "d9246242185d9ce5d4ee45fb0ff3fbc520aa995641dea9b198e43e1e4538b759"
 
 let ghosttyKitTarget: Target =
     if bundledGhosttyKitExists {
