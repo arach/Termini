@@ -49,7 +49,10 @@ public struct TerminiSurfaceView: NSViewRepresentable {
 public final class SurfaceContainerView: NSView {
     private let runtime: TerminiRuntime
     private var surface: ghostty_surface_t?
+    private var surfaceCreationScheduled = false
     private var renderTimer: Timer?
+    private var renderTimerMode: RenderTimerMode?
+    private var renderBurstDeadline = Date.distantPast
     private var trackingArea: NSTrackingArea?
     private var keyMonitor: Any?
     private weak var controller: TerminiTerminalController?
@@ -58,6 +61,8 @@ public final class SurfaceContainerView: NSView {
     private let debugInputLogging = ProcessInfo.processInfo.environment["TERMBRIDGEKIT_DEBUG_INPUT"] == "1"
     private var lastMouseLog: TimeInterval = 0
     private let mouseLogInterval: TimeInterval = 0.05
+    private let activeRenderInterval: TimeInterval = 1.0 / 30.0
+    private let idleFocusedRenderInterval: TimeInterval = 0.5
     var terminalAppearance: TerminiTerminalAppearance = .default {
         didSet {
             guard oldValue != terminalAppearance else { return }
@@ -83,15 +88,17 @@ public final class SurfaceContainerView: NSView {
 
     public override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
-        createSurfaceIfNeeded()
-        bringToFrontAndFocus()
+        guard window != nil else {
+            stopRenderLoop()
+            return
+        }
         installKeyMonitor()
-        startRenderLoop()
+        scheduleSurfaceCreation()
     }
 
     public override func viewDidMoveToSuperview() {
         super.viewDidMoveToSuperview()
-        createSurfaceIfNeeded()
+        scheduleSurfaceCreation()
     }
 
     public override func viewDidChangeEffectiveAppearance() {
@@ -101,6 +108,7 @@ public final class SurfaceContainerView: NSView {
     }
 
     deinit {
+        stopRenderLoop()
         if let surface {
             ghostty_surface_free(surface)
         }
@@ -118,6 +126,7 @@ public final class SurfaceContainerView: NSView {
     public override func becomeFirstResponder() -> Bool {
         let ok = super.becomeFirstResponder()
         setSurfaceFocus(true)
+        requestActiveRenderBurst(duration: 0.75)
         logInput("became first responder: \(ok)")
         return ok
     }
@@ -125,6 +134,7 @@ public final class SurfaceContainerView: NSView {
     public override func resignFirstResponder() -> Bool {
         let ok = super.resignFirstResponder()
         setSurfaceFocus(false)
+        stopRenderLoop()
         logInput("resigned first responder: \(ok)")
         return ok
     }
@@ -177,20 +187,92 @@ public final class SurfaceContainerView: NSView {
         ghostty_surface_set_size(surface, width, height)
         ghostty_surface_refresh(surface)
         ghostty_surface_draw(surface)
+        requestActiveRenderBurst(duration: 0.35)
         reportSizeIfNeeded()
     }
 
     // MARK: Rendering
 
-    private func startRenderLoop() {
+    private enum RenderTimerMode {
+        case active
+        case focusedIdle
+    }
+
+    private func requestActiveRenderBurst(duration: TimeInterval = 0.35) {
+        renderBurstDeadline = max(renderBurstDeadline, Date().addingTimeInterval(duration))
+        startRenderLoop(mode: .active, interval: activeRenderInterval)
+    }
+
+    private func startFocusedIdleRenderLoopIfNeeded() {
+        guard window?.firstResponder === self else {
+            stopRenderLoop()
+            return
+        }
+        startRenderLoop(mode: .focusedIdle, interval: idleFocusedRenderInterval)
+    }
+
+    private func startRenderLoop(mode: RenderTimerMode, interval: TimeInterval) {
+        if renderTimer != nil, renderTimerMode == mode {
+            return
+        }
+
         renderTimer?.invalidate()
-        renderTimer = Timer.scheduledTimer(withTimeInterval: 1.0 / 60.0, repeats: true) { [weak self] _ in
-            guard let self, let surface = self.surface else { return }
+        renderTimerMode = mode
+        let timer = Timer(timeInterval: interval, repeats: true) { [weak self] _ in
+            self?.drawScheduledFrame()
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        renderTimer = timer
+    }
+
+    private func stopRenderLoop() {
+        renderTimer?.invalidate()
+        renderTimer = nil
+        renderTimerMode = nil
+    }
+
+    private func drawScheduledFrame() {
+        guard let surface else {
+            stopRenderLoop()
+            return
+        }
+
+        switch renderTimerMode {
+        case .active:
             ghostty_surface_draw(surface)
+            if Date() >= renderBurstDeadline {
+                startFocusedIdleRenderLoopIfNeeded()
+            }
+        case .focusedIdle:
+            guard window?.firstResponder === self else {
+                stopRenderLoop()
+                return
+            }
+            ghostty_surface_draw(surface)
+        case nil:
+            stopRenderLoop()
         }
     }
 
     // MARK: Surface init
+
+    /// Defer surface creation off the synchronous view-lifecycle/layout pass.
+    ///
+    /// Creating the ghostty surface inline inside `viewDidMoveTo*` blocks the
+    /// main thread on the renderer when the view has no window/drawable yet,
+    /// which stalls the hosting window's first layout so it never appears.
+    /// Schedule it on the next runloop tick, once we're actually in a window.
+    private func scheduleSurfaceCreation() {
+        guard surface == nil, !surfaceCreationScheduled else { return }
+        surfaceCreationScheduled = true
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.surfaceCreationScheduled = false
+            guard self.surface == nil, self.window != nil else { return }
+            self.createSurfaceIfNeeded()
+            self.bringToFrontAndFocus()
+        }
+    }
 
     private func createSurfaceIfNeeded() {
         guard surface == nil, let app = runtime.app else { return }
@@ -208,14 +290,30 @@ public final class SurfaceContainerView: NSView {
         guard let created = ghostty_surface_new(app, &cfg) else { return }
         surface = created
         setSurfaceFocus(true)
-        applyTerminalAppearanceIfNeeded(force: true)
         updateSurfaceSize()
         ghostty_surface_refresh(created)
         ghostty_surface_draw(created)
         reportSizeIfNeeded()
         scheduleDeferredSurfaceSync()
-        if renderTimer == nil {
-            startRenderLoop()
+        requestActiveRenderBurst(duration: 0.75)
+        scheduleInitialAppearance()
+    }
+
+    /// Apply the initial terminal appearance on a later main-actor turn.
+    ///
+    /// `applyTerminalAppearanceIfNeeded(force:)` feeds the theme's escape
+    /// sequence through `ghostty_surface_process_output`. Calling that
+    /// synchronously here — before the ghostty app has ticked the surface we
+    /// just created — blocks the main thread on the surface's IO futex, and
+    /// the `ghostty_app_tick` that would drain it also runs on the main thread,
+    /// so it deadlocks. Ticking the app once and hopping to the next runloop
+    /// turn (mirroring the live PTY output path) lets the surface come up
+    /// first, after which `process_output` returns promptly.
+    private func scheduleInitialAppearance() {
+        DispatchQueue.main.async { [weak self] in
+            guard let self, self.surface != nil else { return }
+            self.runtime.tick()
+            self.applyTerminalAppearanceIfNeeded(force: true)
         }
     }
 
@@ -272,6 +370,7 @@ public final class SurfaceContainerView: NSView {
         }
         ghostty_surface_refresh(surface)
         ghostty_surface_draw(surface)
+        requestActiveRenderBurst(duration: 0.35)
     }
 
     private func applyTerminalAppearanceIfNeeded(force: Bool) {
@@ -311,6 +410,7 @@ public final class SurfaceContainerView: NSView {
 
             ghostty_surface_refresh(surface)
             ghostty_surface_draw(surface)
+            requestActiveRenderBurst(duration: 0.35)
             reportSizeIfNeeded()
         }
 
@@ -362,6 +462,7 @@ public final class SurfaceContainerView: NSView {
             guard self.surface != nil else { return }
             ghostty_surface_refresh(self.surface)
             ghostty_surface_draw(self.surface)
+            self.requestActiveRenderBurst(duration: 0.35)
             self.reportSizeIfNeeded()
         }
     }
@@ -511,6 +612,7 @@ public final class SurfaceContainerView: NSView {
         } else {
             ghostty_surface_key(surface, keyEvent)
         }
+        requestActiveRenderBurst(duration: 0.35)
         logInput("key \(action == GHOSTTY_ACTION_RELEASE ? "up" : "down") keyCode=\(event.keyCode) mods=0x\(String(modsFromFlags(event.modifierFlags).rawValue, radix: 16)) text=\(translatedText(from: event) ?? "<nil>")")
     }
 
@@ -566,6 +668,7 @@ public final class SurfaceContainerView: NSView {
         guard let surface else { return }
         let mods = modsFromFlags(event.modifierFlags)
         ghostty_surface_mouse_scroll(surface, event.scrollingDeltaX, event.scrollingDeltaY, ghostty_input_scroll_mods_t(mods.rawValue))
+        requestActiveRenderBurst(duration: 0.35)
         logInput("scroll dx=\(event.scrollingDeltaX) dy=\(event.scrollingDeltaY) mods=0x\(String(mods.rawValue, radix: 16))")
     }
 
@@ -574,6 +677,7 @@ public final class SurfaceContainerView: NSView {
         let mods = modsFromFlags(event.modifierFlags)
         let button = mouseButton(from: event)
         ghostty_surface_mouse_button(surface, state, button, mods)
+        requestActiveRenderBurst(duration: 0.35)
         sendMouseMove(event)
     }
 
@@ -583,6 +687,7 @@ public final class SurfaceContainerView: NSView {
         let mods = modsFromFlags(event.modifierFlags)
         let flippedY = bounds.height - location.y
         ghostty_surface_mouse_pos(surface, location.x, flippedY, mods)
+        requestActiveRenderBurst(duration: 0.2)
         logMouseInput("mouseMove x=\(location.x) y=\(location.y) mods=0x\(String(mods.rawValue, radix: 16))")
     }
 
@@ -694,6 +799,7 @@ public final class SurfaceContainerView: NSView {
             action,
             UInt(action.lengthOfBytes(using: .utf8))
         )
+        requestActiveRenderBurst(duration: 0.35)
         logInput("paste_from_clipboard \(success ? "succeeded" : "failed")")
         return success
     }
