@@ -51,6 +51,12 @@ public struct TerminiSurfaceView: UIViewRepresentable {
 public final class SurfaceContainerView: UIView, UIKeyInput, UITextInputTraits, UIGestureRecognizerDelegate {
     private let runtime: TerminiRuntime
     private var surface: ghostty_surface_t?
+    /// Set once the surface has been created and ticked. Until then, terminal
+    /// output is buffered rather than handed to `ghostty_surface_process_output`,
+    /// which blocks the main thread on an un-ticked surface (the tick that drains
+    /// it also runs on the main thread).
+    private var surfaceIOReady = false
+    private var pendingOutput = Data()
     private var renderLink: CADisplayLink?
     private weak var controller: TerminiTerminalController?
     private var lastReportedSize: TerminiTerminalSize?
@@ -302,12 +308,34 @@ public final class SurfaceContainerView: UIView, UIKeyInput, UITextInputTraits, 
         surface = created
         synchronizeGhosttyLayerGeometry()
         setSurfaceFocus(true)
-        applyTerminalAppearanceIfNeeded(force: true)
         updateSurfaceSize()
         ghostty_surface_refresh(created)
         ghostty_surface_draw(created)
         reportSizeIfNeeded()
         reportDiagnostics()
+        scheduleInitialAppearance()
+    }
+
+    /// Mark the surface IO-ready and apply the initial appearance on a later
+    /// main-actor turn. Feeding `ghostty_surface_process_output` before the app
+    /// has ticked the freshly-created surface blocks the main thread on the
+    /// surface's IO futex (the draining tick also runs on the main thread), so
+    /// `processRemoteOutput` buffers until this runs.
+    private func scheduleInitialAppearance() {
+        DispatchQueue.main.async { [weak self] in
+            guard let self, self.surface != nil else { return }
+            self.runtime.tick()
+            self.surfaceIOReady = true
+            self.applyTerminalAppearanceIfNeeded(force: true)
+            self.flushPendingOutput()
+        }
+    }
+
+    private func flushPendingOutput() {
+        guard surfaceIOReady, !pendingOutput.isEmpty else { return }
+        let buffered = pendingOutput
+        pendingOutput = Data()
+        processRemoteOutput(buffered)
     }
 
     private func updateSurfaceSize() {
@@ -342,7 +370,13 @@ public final class SurfaceContainerView: UIView, UIKeyInput, UITextInputTraits, 
     }
 
     private func processRemoteOutput(_ data: Data) {
-        guard let surface, !data.isEmpty else { return }
+        guard !data.isEmpty else { return }
+        // Buffer until the surface exists and has been ticked — feeding an
+        // un-ticked surface blocks the main thread (see scheduleInitialAppearance).
+        guard surfaceIOReady, let surface else {
+            pendingOutput.append(data)
+            return
+        }
         data.withUnsafeBytes { buffer in
             guard let ptr = buffer.bindMemory(to: CChar.self).baseAddress else { return }
             ghostty_surface_process_output(surface, ptr, UInt(data.count))

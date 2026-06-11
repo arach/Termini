@@ -50,6 +50,12 @@ public final class SurfaceContainerView: NSView {
     private let runtime: TerminiRuntime
     private var surface: ghostty_surface_t?
     private var surfaceCreationScheduled = false
+    /// Set once the surface has been created and ticked. Until then, terminal
+    /// output (theme escapes, early PTY bytes) is buffered rather than handed to
+    /// `ghostty_surface_process_output`, which blocks the main thread on an
+    /// un-ticked surface (the tick that drains it also runs on the main thread).
+    private var surfaceIOReady = false
+    private var pendingOutput = Data()
     private var renderTimer: Timer?
     private var renderTimerMode: RenderTimerMode?
     private var renderBurstDeadline = Date.distantPast
@@ -93,7 +99,13 @@ public final class SurfaceContainerView: NSView {
             return
         }
         installKeyMonitor()
-        scheduleSurfaceCreation()
+        if surface != nil {
+            // Re-attached to a window (e.g. tab switch) with the surface already
+            // live — scheduleSurfaceCreation() no-ops, so re-request focus here.
+            bringToFrontAndFocus()
+        } else {
+            scheduleSurfaceCreation()
+        }
     }
 
     public override func viewDidMoveToSuperview() {
@@ -299,22 +311,31 @@ public final class SurfaceContainerView: NSView {
         scheduleInitialAppearance()
     }
 
-    /// Apply the initial terminal appearance on a later main-actor turn.
+    /// Mark the surface IO-ready and apply the initial appearance on a later
+    /// main-actor turn.
     ///
-    /// `applyTerminalAppearanceIfNeeded(force:)` feeds the theme's escape
-    /// sequence through `ghostty_surface_process_output`. Calling that
-    /// synchronously here — before the ghostty app has ticked the surface we
-    /// just created — blocks the main thread on the surface's IO futex, and
-    /// the `ghostty_app_tick` that would drain it also runs on the main thread,
-    /// so it deadlocks. Ticking the app once and hopping to the next runloop
-    /// turn (mirroring the live PTY output path) lets the surface come up
-    /// first, after which `process_output` returns promptly.
+    /// Output handed to `ghostty_surface_process_output` before the ghostty app
+    /// has ticked the freshly-created surface blocks the main thread on the
+    /// surface's IO futex — and the `ghostty_app_tick` that would drain it also
+    /// runs on the main thread, so it deadlocks. Until then `processRemoteOutput`
+    /// buffers (`surfaceIOReady == false`). Here we hop to the next runloop turn,
+    /// tick the app so the surface comes up, flip the gate, apply the theme, and
+    /// flush anything that arrived in the meantime.
     private func scheduleInitialAppearance() {
         DispatchQueue.main.async { [weak self] in
             guard let self, self.surface != nil else { return }
             self.runtime.tick()
+            self.surfaceIOReady = true
             self.applyTerminalAppearanceIfNeeded(force: true)
+            self.flushPendingOutput()
         }
+    }
+
+    private func flushPendingOutput() {
+        guard surfaceIOReady, !pendingOutput.isEmpty else { return }
+        let buffered = pendingOutput
+        pendingOutput = Data()
+        processRemoteOutput(buffered)
     }
 
     private func setSurfaceFocus(_ focused: Bool) {
@@ -363,7 +384,13 @@ public final class SurfaceContainerView: NSView {
     }
 
     private func processRemoteOutput(_ data: Data) {
-        guard let surface, !data.isEmpty else { return }
+        guard !data.isEmpty else { return }
+        // Buffer until the surface exists and has been ticked — feeding an
+        // un-ticked surface blocks the main thread (see scheduleInitialAppearance).
+        guard surfaceIOReady, let surface else {
+            pendingOutput.append(data)
+            return
+        }
         data.withUnsafeBytes { buffer in
             guard let ptr = buffer.bindMemory(to: CChar.self).baseAddress else { return }
             ghostty_surface_process_output(surface, ptr, UInt(data.count))
