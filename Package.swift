@@ -18,16 +18,16 @@ let packageRoot = packageRootCandidates.first(where: {
 let localGhosttyKitRelativePath = "vendor/ghostty/macos/GhosttyKit.xcframework"
 let localGhosttyKitAbsolutePath = packageRoot.appending(path: localGhosttyKitRelativePath).path
 let bundledGhosttyKitExists = fileManager.fileExists(atPath: localGhosttyKitAbsolutePath)
-// 0.1.5 fixes the iOS surface-attach regression that 0.1.3 introduced
-// (`addSublayer` selector sent to UIView; should be `addSublayer:` on
-// `UIView.layer`). The patched build uses the upstream Ghostty fix.
+// 0.1.6 tracks Ghostty main (07d31666e, Jun 2026) plus Termini embedding
+// APIs (`write_to_host_cb`, `ghostty_surface_process_output`, font config
+// setters). Upstream already includes the iOS Metal surface-attach fixes.
 //
 // Local development: drop the rebuilt xcframework into
 // `vendor/ghostty/macos/GhosttyKit.xcframework` and the local-vendor
 // preference above will use it. The URL below is consumed when no local
 // vendor is present (CI, downstream packages).
-let releaseGhosttyKitURL = "https://github.com/arach/TermBridgeKit/releases/download/0.1.5/GhosttyKit.xcframework.zip"
-let releaseGhosttyKitChecksum = "d9246242185d9ce5d4ee45fb0ff3fbc520aa995641dea9b198e43e1e4538b759"
+let releaseGhosttyKitURL = "https://github.com/arach/TermBridgeKit/releases/download/0.1.6/GhosttyKit.xcframework.zip"
+let releaseGhosttyKitChecksum = "7265c68e6e2120d8e3ed9bd9299177f6de9312fde492f7923e2af67b23ba1339"
 
 let ghosttyKitTarget: Target =
     if bundledGhosttyKitExists {

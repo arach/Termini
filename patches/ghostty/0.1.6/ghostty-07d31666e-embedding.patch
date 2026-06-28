@@ -1,0 +1,528 @@
+diff --git a/include/ghostty.h b/include/ghostty.h
+index 72bbb57a8..dbd13cfef 100644
+--- a/include/ghostty.h
++++ b/include/ghostty.h
+@@ -1011,6 +1011,7 @@ typedef void (*ghostty_runtime_write_clipboard_cb)(void*,
+                                                    const ghostty_clipboard_content_s*,
+                                                    size_t,
+                                                    bool);
++typedef void (*ghostty_runtime_write_to_host_cb)(void*, const uint8_t*, size_t);
+ typedef void (*ghostty_runtime_close_surface_cb)(void*, bool);
+ typedef bool (*ghostty_runtime_action_cb)(ghostty_app_t,
+                                           ghostty_target_s,
+@@ -1024,6 +1025,7 @@ typedef struct {
+   ghostty_runtime_read_clipboard_cb read_clipboard_cb;
+   ghostty_runtime_confirm_read_clipboard_cb confirm_read_clipboard_cb;
+   ghostty_runtime_write_clipboard_cb write_clipboard_cb;
++  ghostty_runtime_write_to_host_cb write_to_host_cb;
+   ghostty_runtime_close_surface_cb close_surface_cb;
+ } ghostty_runtime_config_s;
+ 
+@@ -1075,6 +1077,12 @@ GHOSTTY_API void ghostty_config_load_file(ghostty_config_t, const char*);
+ GHOSTTY_API void ghostty_config_load_default_files(ghostty_config_t);
+ GHOSTTY_API void ghostty_config_load_recursive_files(ghostty_config_t);
+ GHOSTTY_API void ghostty_config_finalize(ghostty_config_t);
++GHOSTTY_API void ghostty_config_set_font_size(ghostty_config_t, float);
++GHOSTTY_API bool ghostty_config_set_font_family(ghostty_config_t,
++                                              const char*,
++                                              uintptr_t);
++GHOSTTY_API uint32_t ghostty_config_font_family_count(ghostty_config_t);
++GHOSTTY_API const char* ghostty_config_font_family_get(ghostty_config_t, uint32_t);
+ GHOSTTY_API bool ghostty_config_get(ghostty_config_t, void*, const char*, uintptr_t);
+ GHOSTTY_API ghostty_input_trigger_s ghostty_config_trigger(ghostty_config_t,
+                                                               const char*,
+@@ -1127,6 +1135,7 @@ GHOSTTY_API bool ghostty_surface_key_is_binding(ghostty_surface_t,
+                                                    ghostty_input_key_s,
+                                                    ghostty_binding_flags_e*);
+ GHOSTTY_API void ghostty_surface_text(ghostty_surface_t, const char*, uintptr_t);
++GHOSTTY_API void ghostty_surface_process_output(ghostty_surface_t, const char*, uintptr_t);
+ GHOSTTY_API void ghostty_surface_preedit(ghostty_surface_t, const char*, uintptr_t);
+ GHOSTTY_API bool ghostty_surface_mouse_captured(ghostty_surface_t);
+ GHOSTTY_API bool ghostty_surface_mouse_button(ghostty_surface_t,
+diff --git a/src/Surface.zig b/src/Surface.zig
+index c56c9791c..722324fed 100644
+--- a/src/Surface.zig
++++ b/src/Surface.zig
+@@ -645,21 +645,29 @@ pub fn init(
+             std.fmt.bufPrint(&buf, "0x{x:0>16}", .{self.id}) catch unreachable,
+         );
+ 
+-        // Initialize our IO backend
+-        var io_exec = try termio.Exec.init(alloc, .{
+-            .command = command,
+-            .env = env,
+-            .env_override = config.env,
+-            .shell_integration = config.@"shell-integration",
+-            .shell_integration_features = config.@"shell-integration-features",
+-            .cursor_blink = config.@"cursor-style-blink",
+-            .working_directory = if (config.@"working-directory") |wd| wd.value() else null,
+-            .resources_dir = global_state.resources_dir.host(),
+-            .term = config.term,
+-            .rt_pre_exec_info = .init(config),
+-            .rt_post_fork_info = .init(config),
+-        });
+-        errdefer io_exec.deinit();
++        const io_backend = io_backend: {
++            if (comptime @hasDecl(apprt.runtime.Surface, "termioBackend")) {
++                if (rt_surface.termioBackend()) |backend| {
++                    break :io_backend backend;
++                }
++            }
++
++            var io_exec = try termio.Exec.init(alloc, .{
++                .command = command,
++                .env = env,
++                .env_override = config.env,
++                .shell_integration = config.@"shell-integration",
++                .shell_integration_features = config.@"shell-integration-features",
++                .cursor_blink = config.@"cursor-style-blink",
++                .working_directory = if (config.@"working-directory") |wd| wd.value() else null,
++                .resources_dir = global_state.resources_dir.host(),
++                .term = config.term,
++                .rt_pre_exec_info = .init(config),
++                .rt_post_fork_info = .init(config),
++            });
++            errdefer io_exec.deinit();
++            break :io_backend termio.Backend{ .exec = io_exec };
++        };
+ 
+         // Initialize our IO mailbox
+         var io_mailbox = try termio.Mailbox.initSPSC(alloc);
+@@ -669,7 +677,7 @@ pub fn init(
+             .size = size,
+             .full_config = config,
+             .config = try termio.Termio.DerivedConfig.init(alloc, config),
+-            .backend = .{ .exec = io_exec },
++            .backend = io_backend,
+             .mailbox = io_mailbox,
+             .renderer_state = &self.renderer_state,
+             .renderer_wakeup = render_thread.wakeup,
+@@ -1313,6 +1321,7 @@ fn childExitedAbnormally(
+     // Build up our command for the error message
+     const command = try std.mem.join(alloc, " ", switch (self.io.backend) {
+         .exec => |*exec| exec.subprocess.args,
++        .host => &[_][]const u8{"embedding host"},
+     });
+     const runtime_str = try std.fmt.allocPrint(alloc, "{d} ms", .{info.runtime_ms});
+ 
+diff --git a/src/apprt/embedded.zig b/src/apprt/embedded.zig
+index 7310159cc..7fc979d03 100644
+--- a/src/apprt/embedded.zig
++++ b/src/apprt/embedded.zig
+@@ -21,6 +21,7 @@ const CoreSurface = @import("../Surface.zig");
+ const configpkg = @import("../config.zig");
+ const Config = configpkg.Config;
+ const String = @import("../main_c.zig").String;
++const termio = @import("../termio.zig");
+ 
+ const log = std.log.scoped(.embedded_window);
+ 
+@@ -76,6 +77,9 @@ pub const App = struct {
+             bool,
+         ) callconv(.c) void,
+ 
++        /// Write bytes back to the embedding host instead of to a pty.
++        write_to_host: ?*const fn (SurfaceUD, [*]const u8, usize) callconv(.c) void = null,
++
+         /// Close the current surface given by this function.
+         close_surface: ?*const fn (SurfaceUD, bool) callconv(.c) void = null,
+     };
+@@ -981,6 +985,15 @@ pub const Surface = struct {
+         return env;
+     }
+ 
++    pub fn termioBackend(self: *const Surface) ?termio.Backend {
++        const write_to_host = self.app.opts.write_to_host orelse return null;
++
++        return .{ .host = termio.Host.init(.{
++            .userdata = self.userdata,
++            .write = write_to_host,
++        }) };
++    }
++
+     /// The cursor position from the host directly is in screen coordinates but
+     /// all our interface works in pixels.
+     fn cursorPosToPixels(self: *const Surface, pos: apprt.CursorPos) !apprt.CursorPos {
+@@ -1823,6 +1836,15 @@ pub const CAPI = struct {
+         surface.textCallback(ptr[0..len]);
+     }
+ 
++    /// Process output from a host-owned transport.
++    export fn ghostty_surface_process_output(
++        surface: *Surface,
++        ptr: [*]const u8,
++        len: usize,
++    ) void {
++        surface.core_surface.io.processOutput(ptr[0..len]);
++    }
++
+     /// Set the preedit text for the surface. This is used for IME
+     /// composition. If the length is 0, then the preedit text is cleared.
+     export fn ghostty_surface_preedit(
+diff --git a/src/config/CApi.zig b/src/config/CApi.zig
+index 7d3366c93..4f0f4e047 100644
+--- a/src/config/CApi.zig
++++ b/src/config/CApi.zig
+@@ -90,6 +90,36 @@ export fn ghostty_config_finalize(self: *Config) void {
+     };
+ }
+ 
++export fn ghostty_config_set_font_size(self: *Config, size: f32) void {
++    self.@"font-size" = std.math.clamp(size, 1.0, 255.0);
++}
++
++export fn ghostty_config_set_font_family(
++    self: *Config,
++    str: [*]const u8,
++    len: usize,
++) bool {
++    config_set_font_family_(self, str[0..len]) catch |err| {
++        log.err("error setting font family err={}", .{err});
++        return false;
++    };
++
++    return true;
++}
++
++export fn ghostty_config_font_family_count(self: *const Config) u32 {
++    return @intCast(self.@"font-family".count());
++}
++
++export fn ghostty_config_font_family_get(
++    self: *const Config,
++    idx: u32,
++) ?[*:0]const u8 {
++    const items = self.@"font-family".list.items;
++    if (idx >= items.len) return null;
++    return @ptrCast(items[idx].ptr);
++}
++
+ export fn ghostty_config_get(
+     self: *Config,
+     ptr: *anyopaque,
+@@ -121,6 +151,25 @@ fn config_trigger_(
+     return trigger.cval();
+ }
+ 
++fn config_set_font_family_(self: *Config, value: []const u8) !void {
++    const alloc = self._arena.?.allocator();
++
++    clearRepeatableString(&self.@"font-family");
++    clearRepeatableString(&self.@"font-family-bold");
++    clearRepeatableString(&self.@"font-family-italic");
++    clearRepeatableString(&self.@"font-family-bold-italic");
++
++    if (value.len == 0) return;
++
++    const copy = try alloc.dupeZ(u8, value);
++    try self.@"font-family".list.append(alloc, copy);
++}
++
++fn clearRepeatableString(value: *Config.RepeatableString) void {
++    value.list.clearRetainingCapacity();
++    value.overwrite_next = false;
++}
++
+ export fn ghostty_config_diagnostics_count(self: *Config) u32 {
+     return @intCast(self._diagnostics.items().len);
+ }
+@@ -146,6 +195,41 @@ const Diagnostic = extern struct {
+     message: [*:0]const u8 = "",
+ };
+ 
++test "c_api: set font family overwrites style-specific families" {
++    const testing = std.testing;
++    const alloc = testing.allocator;
++
++    var config = try Config.default(alloc);
++    defer config.deinit();
++
++    try config.@"font-family-bold".parseCLI(alloc, "Old Bold");
++    try config.@"font-family-italic".parseCLI(alloc, "Old Italic");
++
++    try testing.expect(ghostty_config_set_font_family(&config, "SF Mono", "SF Mono".len));
++    try testing.expectEqual(@as(u32, 1), ghostty_config_font_family_count(&config));
++    try testing.expectEqualStrings(
++        "SF Mono",
++        std.mem.sliceTo(ghostty_config_font_family_get(&config, 0).?, 0),
++    );
++    try testing.expectEqual(@as(usize, 0), config.@"font-family-bold".count());
++    try testing.expectEqual(@as(usize, 0), config.@"font-family-italic".count());
++    try testing.expectEqual(@as(usize, 0), config.@"font-family-bold-italic".count());
++}
++
++test "c_api: set font size clamps input" {
++    const testing = std.testing;
++    const alloc = testing.allocator;
++
++    var config = try Config.default(alloc);
++    defer config.deinit();
++
++    ghostty_config_set_font_size(&config, 0.5);
++    try testing.expectEqual(@as(f32, 1), config.@"font-size");
++
++    ghostty_config_set_font_size(&config, 512);
++    try testing.expectEqual(@as(f32, 255), config.@"font-size");
++}
++
+ test "ghostty_config_get: bool" {
+     const testing = std.testing;
+     const alloc = testing.allocator;
+diff --git a/src/termio.zig b/src/termio.zig
+index b16885109..e2860fe2a 100644
+--- a/src/termio.zig
++++ b/src/termio.zig
+@@ -23,6 +23,7 @@ const message = @import("termio/message.zig");
+ pub const backend = @import("termio/backend.zig");
+ pub const mailbox = @import("termio/mailbox.zig");
+ pub const Exec = @import("termio/Exec.zig");
++pub const Host = @import("termio/Host.zig");
+ pub const Options = @import("termio/Options.zig");
+ pub const Termio = @import("termio/Termio.zig");
+ pub const Thread = @import("termio/Thread.zig");
+diff --git a/src/termio/Host.zig b/src/termio/Host.zig
+new file mode 100644
+index 000000000..8a1d43bd6
+--- /dev/null
++++ b/src/termio/Host.zig
+@@ -0,0 +1,128 @@
++//! Host implements a termio backend that forwards writes to an embedding
++//! host application instead of a pty-backed subprocess.
++const Host = @This();
++
++const std = @import("std");
++const Allocator = std.mem.Allocator;
++const renderer = @import("../renderer.zig");
++const terminal = @import("../terminal/main.zig");
++const termio = @import("../termio.zig");
++const ProcessInfo = @import("../pty.zig").ProcessInfo;
++
++pub const Config = struct {
++    userdata: ?*anyopaque,
++    write: *const fn (?*anyopaque, [*]const u8, usize) callconv(.c) void,
++};
++
++pub const ThreadData = struct {
++    pub fn deinit(self: *ThreadData, alloc: Allocator) void {
++        _ = self;
++        _ = alloc;
++    }
++};
++
++config: Config,
++
++pub fn init(cfg: Config) Host {
++    return .{ .config = cfg };
++}
++
++pub fn deinit(self: *Host) void {
++    _ = self;
++}
++
++pub fn initTerminal(self: *Host, term: *terminal.Terminal) void {
++    self.resize(.{
++        .columns = term.cols,
++        .rows = term.rows,
++    }, .{
++        .width = term.width_px,
++        .height = term.height_px,
++    }) catch {};
++}
++
++pub fn threadEnter(
++    self: *Host,
++    _: Allocator,
++    _: *termio.Termio,
++    td: *termio.Termio.ThreadData,
++) !void {
++    td.backend = .{ .host = .{} };
++    _ = self;
++}
++
++pub fn threadExit(self: *Host, td: *termio.Termio.ThreadData) void {
++    _ = self;
++    _ = td;
++}
++
++pub fn focusGained(
++    self: *Host,
++    td: *termio.Termio.ThreadData,
++    focused: bool,
++) !void {
++    _ = self;
++    _ = td;
++    _ = focused;
++}
++
++pub fn resize(
++    self: *Host,
++    _: renderer.GridSize,
++    _: renderer.ScreenSize,
++) !void {
++    _ = self;
++}
++
++pub fn queueWrite(
++    self: *Host,
++    alloc: Allocator,
++    td: *termio.Termio.ThreadData,
++    data: []const u8,
++    linefeed: bool,
++) !void {
++    _ = td;
++
++    if (!linefeed) {
++        self.config.write(self.config.userdata, data.ptr, data.len);
++        return;
++    }
++
++    var buf: std.ArrayListUnmanaged(u8) = .{};
++    defer buf.deinit(alloc);
++
++    try buf.ensureTotalCapacityPrecise(alloc, data.len);
++
++    for (data) |ch| {
++        if (ch != '\r') {
++            try buf.append(alloc, ch);
++            continue;
++        }
++
++        try buf.appendSlice(alloc, &.{ '\r', '\n' });
++    }
++
++    const slice = buf.items;
++    if (slice.len > 0) {
++        self.config.write(self.config.userdata, slice.ptr, slice.len);
++    }
++}
++
++pub fn childExitedAbnormally(
++    self: *Host,
++    gpa: Allocator,
++    t: *terminal.Terminal,
++    exit_code: u32,
++    runtime_ms: u64,
++) !void {
++    _ = self;
++    _ = gpa;
++    _ = t;
++    _ = exit_code;
++    _ = runtime_ms;
++}
++
++pub fn getProcessInfo(self: *Host, comptime info: ProcessInfo) ?ProcessInfo.Type(info) {
++    _ = self;
++    return null;
++}
+\ No newline at end of file
+diff --git a/src/termio/backend.zig b/src/termio/backend.zig
+index c29009acb..341aae87e 100644
+--- a/src/termio/backend.zig
++++ b/src/termio/backend.zig
+@@ -11,28 +11,32 @@ const ProcessInfo = @import("../pty.zig").ProcessInfo;
+ const WRITE_REQ_PREALLOC = std.math.pow(usize, 2, 5);
+ 
+ /// The kinds of backends.
+-pub const Kind = enum { exec };
++pub const Kind = enum { exec, host };
+ 
+ /// Configuration for the various backend types.
+ pub const Config = union(Kind) {
+     /// Exec uses posix exec to run a command with a pty.
+     exec: termio.Exec.Config,
++    host: termio.Host.Config,
+ };
+ 
+ /// Backend implementations. A backend is responsible for owning the pty
+ /// behavior and providing read/write capabilities.
+ pub const Backend = union(Kind) {
+     exec: termio.Exec,
++    host: termio.Host,
+ 
+     pub fn deinit(self: *Backend) void {
+         switch (self.*) {
+             .exec => |*exec| exec.deinit(),
++            .host => |*host| host.deinit(),
+         }
+     }
+ 
+     pub fn initTerminal(self: *Backend, t: *terminal.Terminal) void {
+         switch (self.*) {
+             .exec => |*exec| exec.initTerminal(t),
++            .host => |*host| host.initTerminal(t),
+         }
+     }
+ 
+@@ -44,12 +48,14 @@ pub const Backend = union(Kind) {
+     ) !void {
+         switch (self.*) {
+             .exec => |*exec| try exec.threadEnter(alloc, io, td),
++            .host => |*host| try host.threadEnter(alloc, io, td),
+         }
+     }
+ 
+     pub fn threadExit(self: *Backend, td: *termio.Termio.ThreadData) void {
+         switch (self.*) {
+             .exec => |*exec| exec.threadExit(td),
++            .host => |*host| host.threadExit(td),
+         }
+     }
+ 
+@@ -60,6 +66,7 @@ pub const Backend = union(Kind) {
+     ) !void {
+         switch (self.*) {
+             .exec => |*exec| try exec.focusGained(td, focused),
++            .host => |*host| try host.focusGained(td, focused),
+         }
+     }
+ 
+@@ -70,6 +77,7 @@ pub const Backend = union(Kind) {
+     ) !void {
+         switch (self.*) {
+             .exec => |*exec| try exec.resize(grid_size, screen_size),
++            .host => |*host| try host.resize(grid_size, screen_size),
+         }
+     }
+ 
+@@ -82,6 +90,7 @@ pub const Backend = union(Kind) {
+     ) !void {
+         switch (self.*) {
+             .exec => |*exec| try exec.queueWrite(alloc, td, data, linefeed),
++            .host => |*host| try host.queueWrite(alloc, td, data, linefeed),
+         }
+     }
+ 
+@@ -99,6 +108,12 @@ pub const Backend = union(Kind) {
+                 exit_code,
+                 runtime_ms,
+             ),
++            .host => |*host| try host.childExitedAbnormally(
++                gpa,
++                t,
++                exit_code,
++                runtime_ms,
++            ),
+         }
+     }
+ 
+@@ -108,6 +123,7 @@ pub const Backend = union(Kind) {
+     pub fn getProcessInfo(self: *Backend, comptime info: ProcessInfo) ?ProcessInfo.Type(info) {
+         return switch (self.*) {
+             .exec => |*exec| exec.getProcessInfo(info),
++            .host => |*host| host.getProcessInfo(info),
+         };
+     }
+ };
+@@ -115,10 +131,12 @@ pub const Backend = union(Kind) {
+ /// Termio thread data. See termio.ThreadData for docs.
+ pub const ThreadData = union(Kind) {
+     exec: termio.Exec.ThreadData,
++    host: termio.Host.ThreadData,
+ 
+     pub fn deinit(self: *ThreadData, alloc: Allocator) void {
+         switch (self.*) {
+             .exec => |*exec| exec.deinit(alloc),
++            .host => |*host| host.deinit(alloc),
+         }
+     }
+ 

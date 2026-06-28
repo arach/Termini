@@ -70,8 +70,30 @@ if [[ ! -d "${XCFRAMEWORK_PATH}" ]]; then
   exit 1
 fi
 
+normalize_swiftpm_library_names() {
+  local xcframework_dir="$1"
+
+  local macos_dir="${xcframework_dir}/macos-arm64_x86_64"
+  if [[ -f "${macos_dir}/ghostty-internal.a" ]]; then
+    mv "${macos_dir}/ghostty-internal.a" "${macos_dir}/libghostty.a"
+  fi
+
+  for slice in ios-arm64 ios-arm64-simulator; do
+    local ios_dir="${xcframework_dir}/${slice}"
+    if [[ -f "${ios_dir}/libghostty-internal-fat.a" ]]; then
+      mv "${ios_dir}/libghostty-internal-fat.a" "${ios_dir}/libghostty-fat.a"
+    fi
+  done
+
+  /usr/bin/sed -i '' \
+    -e 's/ghostty-internal\.a/libghostty.a/g' \
+    -e 's/libghostty-internal-fat\.a/libghostty-fat.a/g' \
+    "${xcframework_dir}/Info.plist"
+}
+
 mkdir -p "${DEST_DIR}"
 rsync -a --delete "${XCFRAMEWORK_PATH%/}/" "${DEST_DIR}/GhosttyKit.xcframework/"
+normalize_swiftpm_library_names "${DEST_DIR}/GhosttyKit.xcframework"
 SOURCE_GIT_ROOT="$(find_git_root "$(cd "$(dirname "${XCFRAMEWORK_PATH}")" && pwd)" || true)"
 write_metadata "${SOURCE_GIT_ROOT}"
 
