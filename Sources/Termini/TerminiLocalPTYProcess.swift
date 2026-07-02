@@ -145,6 +145,12 @@ public final class TerminiLocalPTYProcess: @unchecked Sendable {
             payload.withUnsafeBytes { bytes in
                 guard var cursor = bytes.bindMemory(to: UInt8.self).baseAddress else { return }
                 var remaining = bytes.count
+                // Bound the back-pressure wait: if the reader (e.g. a stalled SSH
+                // link) never drains, give up rather than spin forever. An unbounded
+                // wait here wedges this serial queue, which would deadlock a
+                // `queue.sync` caller such as `terminate()` — hanging app shutdown.
+                var stalledMicros = 0
+                let maxStallMicros = 1_000_000
 
                 while remaining > 0 {
                     let written = Darwin.write(self.masterFileDescriptor, cursor, remaining)
@@ -152,10 +158,13 @@ public final class TerminiLocalPTYProcess: @unchecked Sendable {
                     if written > 0 {
                         remaining -= written
                         cursor = cursor.advanced(by: written)
+                        stalledMicros = 0
                     } else if written == -1 && errno == EINTR {
                         continue
                     } else if written == -1 && (errno == EAGAIN || errno == EWOULDBLOCK) {
+                        if stalledMicros >= maxStallMicros { break }
                         usleep(5_000)
+                        stalledMicros += 5_000
                     } else {
                         break
                     }
@@ -216,12 +225,28 @@ public final class TerminiLocalPTYProcess: @unchecked Sendable {
         guard masterFileDescriptor >= 0 else { return }
 
         var buffer = [UInt8](repeating: 0, count: 4_096)
+        // Coalesce everything readable in this drain pass into one onOutput
+        // callback. Emitting one callback per 4 KB read means a fast producer
+        // (build logs, `cat` of a big file) causes hundreds of main-thread
+        // hops + per-chunk terminal feeds per second. Bounded so a sustained
+        // firehose still yields data downstream periodically.
+        var pending = Data()
+        let maxCoalescedBytes = 128 * 1024
+
+        func flush() {
+            guard !pending.isEmpty else { return }
+            onOutput?(pending)
+            pending = Data()
+        }
 
         while true {
             let count = read(masterFileDescriptor, &buffer, buffer.count)
 
             if count > 0 {
-                onOutput?(Data(buffer[0..<count]))
+                pending.append(contentsOf: buffer[0..<count])
+                if pending.count >= maxCoalescedBytes {
+                    flush()
+                }
             } else if count == 0 {
                 break
             } else if errno == EINTR {
@@ -232,6 +257,7 @@ public final class TerminiLocalPTYProcess: @unchecked Sendable {
                 break
             }
         }
+        flush()
     }
 
     private func handleExit() {
