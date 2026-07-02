@@ -42,6 +42,7 @@ demos, and go deeper.
 - [Guides](#guides) — appearance, SSH, custom transports, host verification, debugging
 - [Developing Termini itself](#developing-termini-itself)
 - [Good to know](#good-to-know)
+- [License](#license)
 
 ---
 
@@ -326,5 +327,15 @@ automatically. The helper scripts do the work:
   `import Termini`.
 - **Third-party code:** see [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md) for bundled
   dependencies, including Ghostty.
+
+---
+
+## License
+
+Termini is released under the [MIT License](LICENSE).
+
+Termini stands on [Ghostty](https://ghostty.org) — the bundled `GhosttyKit.xcframework`
+is Ghostty's terminal engine, © Mitchell Hashimoto and the Ghostty contributors, also
+MIT-licensed. See [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md) for the full notice.
 </content>
 </invoke>
