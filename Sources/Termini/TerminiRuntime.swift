@@ -13,7 +13,7 @@ final class TerminiRuntime: ObservableObject {
     private let config: ghostty_config_t?
     private(set) var app: ghostty_app_t?
 
-    /// Timer to drive periodic ticks in case the runtime doesn't wake us up.
+    /// Backstop timer in case the runtime doesn’t wake us up (see startTickLoop).
     private var tickTimer: Timer?
     private var notificationTokens: [NSObjectProtocol] = []
     private var hasPendingWakeupTick = false
@@ -191,12 +191,21 @@ final class TerminiRuntime: ObservableObject {
         }
     }
 
+    // The tick loop is a slow backstop, not a 60 Hz drive. Real work is pushed
+    // through `wakeup_cb` → `scheduleWakeupTick()`: libghostty asks for a tick
+    // whenever its mailbox has messages, so ticking blindly at 60 Hz just
+    // burned 60 wakeups + 60 main-queue dispatches per second forever
+    // (blocking App Nap and draining battery while the app sat idle). Keep a
+    // once-a-second safety net with wide tolerance so a missed wakeup can never
+    // wedge the engine, and let the OS coalesce the wakeup with other timers.
     private func startTickLoop() {
-        tickTimer = Timer.scheduledTimer(withTimeInterval: 1.0 / 60.0, repeats: true) { [weak self] _ in
+        let timer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
             DispatchQueue.main.async {
                 self?.tick()
             }
         }
+        timer.tolerance = 0.5
+        tickTimer = timer
     }
 
     private func observeAppFocus() {
