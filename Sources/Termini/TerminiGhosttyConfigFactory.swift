@@ -10,8 +10,11 @@ enum TerminiGhosttyConfigFactory {
             return nil
         }
 
+        var modified = false
+
         if let fontSize = appearance.clampedGhosttyFontSize {
             ghostty_config_set_font_size(config, Float(fontSize))
+            modified = true
         }
 
         if let fontFamily = appearance.normalizedFontFamilyName {
@@ -23,7 +26,17 @@ enum TerminiGhosttyConfigFactory {
                 ghostty_config_free(config)
                 return nil
             }
+            modified = true
+        }
 
+        // Load extra config files (e.g. a host app's colour theme snippet). The
+        // C API exposes no per-key colour setter, so colours come in this way.
+        for path in appearance.extraConfigFilePaths {
+            path.withCString { ghostty_config_load_file(config, $0) }
+            modified = true
+        }
+
+        if modified {
             ghostty_config_finalize(config)
         }
 
