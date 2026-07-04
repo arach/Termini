@@ -691,12 +691,40 @@ public final class SurfaceContainerView: NSView {
         sendMouseMove(event)
     }
 
+    // The last argument of ghostty_surface_mouse_scroll is NOT keyboard mods:
+    // bit 0 is the precision flag and bits 1–3 the momentum phase (ghostty
+    // src/input/mouse.zig). Passing the keyboard-modifier bitmask made ghostty
+    // treat trackpad *pixel* deltas as discrete wheel ticks, multiplying each
+    // by the cell height — one line scrolled per pixel of finger travel (and
+    // holding shift flipped the precision bit). Mirror ghostty's own AppKit
+    // surface view instead: precise deltas are pixels (with ghostty's 2x feel
+    // multiplier), discrete wheel ticks pass through unscaled, and the
+    // momentum phase is forwarded so inertial scrolling behaves.
     public override func scrollWheel(with event: NSEvent) {
         guard let surface else { return }
-        let mods = modsFromFlags(event.modifierFlags)
-        ghostty_surface_mouse_scroll(surface, event.scrollingDeltaX, event.scrollingDeltaY, ghostty_input_scroll_mods_t(mods.rawValue))
+        var x = event.scrollingDeltaX
+        var y = event.scrollingDeltaY
+        let precision = event.hasPreciseScrollingDeltas
+        if precision {
+            x *= 2
+            y *= 2
+        }
+        let momentum: ghostty_input_mouse_momentum_e
+        switch event.momentumPhase {
+        case .began: momentum = GHOSTTY_MOUSE_MOMENTUM_BEGAN
+        case .stationary: momentum = GHOSTTY_MOUSE_MOMENTUM_STATIONARY
+        case .changed: momentum = GHOSTTY_MOUSE_MOMENTUM_CHANGED
+        case .ended: momentum = GHOSTTY_MOUSE_MOMENTUM_ENDED
+        case .cancelled: momentum = GHOSTTY_MOUSE_MOMENTUM_CANCELLED
+        case .mayBegin: momentum = GHOSTTY_MOUSE_MOMENTUM_MAY_BEGIN
+        default: momentum = GHOSTTY_MOUSE_MOMENTUM_NONE
+        }
+        let scrollMods = ghostty_input_scroll_mods_t(
+            (precision ? 1 : 0) | (Int32(momentum.rawValue) << 1)
+        )
+        ghostty_surface_mouse_scroll(surface, x, y, scrollMods)
         requestActiveRenderBurst(duration: 0.35)
-        logInput("scroll dx=\(event.scrollingDeltaX) dy=\(event.scrollingDeltaY) mods=0x\(String(mods.rawValue, radix: 16))")
+        logInput("scroll dx=\(x) dy=\(y) precision=\(precision) momentum=\(momentum.rawValue)")
     }
 
     private func sendMouse(_ event: NSEvent, state: ghostty_input_mouse_state_e) {
