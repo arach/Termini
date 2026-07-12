@@ -9,6 +9,7 @@ GHOSTTY_DIR="${GHOSTTY_DIR:-${REPO_ROOT}/vendor/ghostty}"
 GHOSTTY_REPO="${GHOSTTY_REPO:-https://github.com/ghostty-org/ghostty.git}"
 GHOSTTY_REF="${GHOSTTY_REF:-}"
 GHOSTTY_OPTIMIZE="${GHOSTTY_OPTIMIZE:-ReleaseFast}"
+GHOSTTY_PATCH_DIR="${GHOSTTY_PATCH_DIR:-${REPO_ROOT}/patches/ghostty/0.1.6}"
 SHOULD_FETCH=0
 
 usage() {
@@ -20,12 +21,14 @@ Options:
   --ref REF            Git ref to check out before building.
   --fetch              Fetch origin before checking out REF.
   --optimize MODE      Zig optimize mode. Default: ${GHOSTTY_OPTIMIZE}
+  --patch-dir PATH     Patches for the pinned Ghostty source. Default: ${GHOSTTY_PATCH_DIR}
 
 Env:
   GHOSTTY_DIR
   GHOSTTY_REPO
   GHOSTTY_REF
   GHOSTTY_OPTIMIZE
+  GHOSTTY_PATCH_DIR
 EOF
 }
 
@@ -34,6 +37,37 @@ require_cmd() {
     echo "error: missing dependency '$1'" >&2
     exit 1
   fi
+}
+
+apply_patches() {
+  if [[ ! -d "${GHOSTTY_PATCH_DIR}" ]]; then
+    echo "error: Ghostty patch directory does not exist: ${GHOSTTY_PATCH_DIR}" >&2
+    exit 1
+  fi
+
+  local patches=()
+  local patch
+  while IFS= read -r patch; do
+    patches+=("${patch}")
+  done < <(find "${GHOSTTY_PATCH_DIR}" -type f -name '*.patch' -print | LC_ALL=C sort)
+
+  if [[ "${#patches[@]}" -eq 0 ]]; then
+    echo "error: no Ghostty patches found in ${GHOSTTY_PATCH_DIR}" >&2
+    exit 1
+  fi
+
+  for patch in "${patches[@]}"; do
+    if git -C "${GHOSTTY_DIR}" apply --reverse --check "${patch}" >/dev/null 2>&1; then
+      echo "Patch already applied: $(basename "${patch}")"
+      continue
+    fi
+    if ! git -C "${GHOSTTY_DIR}" apply --check "${patch}"; then
+      echo "error: patch does not apply cleanly: ${patch}" >&2
+      exit 1
+    fi
+    git -C "${GHOSTTY_DIR}" apply "${patch}"
+    echo "Applied patch: $(basename "${patch}")"
+  done
 }
 
 ensure_checkout() {
@@ -80,6 +114,10 @@ while [[ $# -gt 0 ]]; do
       GHOSTTY_OPTIMIZE="$2"
       shift 2
       ;;
+    --patch-dir)
+      GHOSTTY_PATCH_DIR="$2"
+      shift 2
+      ;;
     -h|--help)
       usage
       exit 0
@@ -97,6 +135,7 @@ require_cmd zig
 
 ensure_checkout
 update_checkout
+apply_patches
 
 (
   cd "${GHOSTTY_DIR}"
@@ -110,5 +149,6 @@ update_checkout
 )
 
 "${REPO_ROOT}/scripts/install-ghosttykit.sh" "${GHOSTTY_DIR}/macos/GhosttyKit.xcframework"
+"${REPO_ROOT}/scripts/verify-ghosttykit.sh"
 
 echo "Built GhosttyKit from $(git -C "${GHOSTTY_DIR}" rev-parse --short HEAD)"
