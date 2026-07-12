@@ -13,6 +13,8 @@ if [[ ! -d "${XCFRAMEWORK_PATH}" ]]; then
   exit 1
 fi
 
+"${REPO_ROOT}/scripts/verify-ghosttykit.sh" "${XCFRAMEWORK_PATH}"
+
 mkdir -p "${OUTPUT_DIR}"
 rm -f "${OUTPUT_PATH}"
 
