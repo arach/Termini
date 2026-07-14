@@ -59,6 +59,7 @@ final class TerminiRuntime: ObservableObject {
             .path
         setenv("XDG_CONFIG_HOME", terminiXDGConfigHome, 1)
         ghostty_config_load_default_files(config)
+        ghostty_config_finalize(config)
         if let previousXDGConfigHome {
             setenv("XDG_CONFIG_HOME", previousXDGConfigHome, 1)
         } else {
@@ -66,8 +67,8 @@ final class TerminiRuntime: ObservableObject {
         }
         #else
         ghostty_config_load_default_files(config)
-        #endif
         ghostty_config_finalize(config)
+        #endif
 
         // Build runtime callbacks.
         var runtime = ghostty_runtime_config_s(
