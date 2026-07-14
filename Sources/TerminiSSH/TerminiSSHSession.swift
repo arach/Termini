@@ -625,6 +625,29 @@ extension TerminiSSHSession {
         }
 
         func channelActive(context: ChannelHandlerContext) {
+            // tmux decides whether a client is UTF-8 capable from the SSH
+            // session locale. Without these requests, servers commonly start
+            // the shell in the C locale and tmux substitutes Nerd Font and
+            // other non-ASCII cells with underscores before bytes ever reach
+            // Termini's renderer.
+            for (name, value) in [
+                ("LANG", "en_US.UTF-8"),
+                ("LC_CTYPE", "en_US.UTF-8"),
+            ] {
+                context.triggerUserOutboundEvent(
+                    SSHChannelRequestEvent.EnvironmentRequest(
+                        wantReply: false,
+                        name: name,
+                        value: value
+                    ),
+                    promise: nil
+                )
+            }
+
+            // RFC 8160 reserves opcode 42 for IUTF8. NIOSSH intentionally
+            // supports raw opcodes so clients can negotiate modes newer than
+            // its named convenience constants.
+            let iutf8 = SSHTerminalModes.Opcode(rawValue: 42)
             let ptyRequest = SSHChannelRequestEvent.PseudoTerminalRequest(
                 wantReply: true,
                 term: term,
@@ -632,7 +655,7 @@ extension TerminiSSHSession {
                 terminalRowHeight: initialRows,
                 terminalPixelWidth: initialPixelWidth,
                 terminalPixelHeight: initialPixelHeight,
-                terminalModes: SSHTerminalModes([:])
+                terminalModes: SSHTerminalModes([iutf8: 1])
             )
 
             let ptyPromise = context.eventLoop.makePromise(of: Void.self)
