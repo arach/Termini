@@ -30,6 +30,7 @@ public final class TerminiSSHWorkspace {
 
         controller.onSizeChange = { [weak self] size in
             self?.terminalSize = size
+            self?.session?.updateTerminalSize(size)
         }
 
         controller.onDiagnosticsChange = { [weak self] diagnostics in
@@ -91,7 +92,11 @@ public final class TerminiSSHWorkspace {
 
         lastErrorMessage = nil
         statusMessage = "Connecting to \(connection.endpointLabel)…"
-        await ensureSession().connect(configuration: configuration)
+        let session = ensureSession()
+        if let terminalSize {
+            session.updateTerminalSize(terminalSize)
+        }
+        await session.connect(configuration: configuration)
     }
 
     public func disconnect() async {
