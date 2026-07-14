@@ -47,8 +47,28 @@ final class TerminiRuntime: ObservableObject {
             return
         }
 
+        #if os(iOS)
+        // Ghostty's XDG lookup cannot discover a home directory inside an iOS
+        // app sandbox. Give the synchronous config load an explicit root so
+        // embedded surfaces can honor font maps and other renderer settings.
+        // Restore the process environment immediately afterward because
+        // Termini does not own configuration lookup for the rest of the app.
+        let previousXDGConfigHome = getenv("XDG_CONFIG_HOME").map { String(cString: $0) }
+        let terminiXDGConfigHome = URL(fileURLWithPath: NSHomeDirectory(), isDirectory: true)
+            .appendingPathComponent(".config", isDirectory: true)
+            .path
+        setenv("XDG_CONFIG_HOME", terminiXDGConfigHome, 1)
         ghostty_config_load_default_files(config)
         ghostty_config_finalize(config)
+        if let previousXDGConfigHome {
+            setenv("XDG_CONFIG_HOME", previousXDGConfigHome, 1)
+        } else {
+            unsetenv("XDG_CONFIG_HOME")
+        }
+        #else
+        ghostty_config_load_default_files(config)
+        ghostty_config_finalize(config)
+        #endif
 
         // Build runtime callbacks.
         var runtime = ghostty_runtime_config_s(

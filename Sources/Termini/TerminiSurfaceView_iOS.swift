@@ -111,6 +111,11 @@ public final class SurfaceContainerView: UIView, UIKeyInput, UITextInputTraits, 
         super.init(frame: CGRect(x: 0, y: 0, width: 800, height: 600))
         updateBackgroundColor()
         isOpaque = true
+        // Ghostty owns an IOSurfaceLayer below this view. Older known-good
+        // GhosttyKit builds can size that layer to the full drawable before our
+        // first layout pass; clip it so the terminal never paints over sibling
+        // app chrome while synchronizeGhosttyLayerGeometry brings it in sync.
+        clipsToBounds = true
         contentScaleFactor = UIScreen.main.scale
         isMultipleTouchEnabled = true
         addGestureRecognizer(scrollPanGestureRecognizer)
@@ -306,6 +311,12 @@ public final class SurfaceContainerView: UIView, UIKeyInput, UITextInputTraits, 
 
         guard let created = ghostty_surface_new(app, &cfg) else { return }
         surface = created
+        // `font_size` is part of the surface creation config, so it is already
+        // active in the initial Ghostty font grid. Treat it as applied here to
+        // avoid immediately replacing that grid with an identical one. Older
+        // Metal renderers can otherwise leave cached cells pointing at the
+        // retired glyph atlas until a full rebuild.
+        lastAppliedAppearance.fontSize = terminalAppearance.fontSize
         synchronizeGhosttyLayerGeometry()
         setSurfaceFocus(true)
         updateSurfaceSize()
@@ -404,9 +415,11 @@ public final class SurfaceContainerView: UIView, UIKeyInput, UITextInputTraits, 
 
         let fontSizeChanged = lastAppliedAppearance.fontSize != terminalAppearance.fontSize
         let fontFamilyChanged = lastAppliedAppearance.fontFamily != terminalAppearance.fontFamily
+        let extraConfigFilePathsChanged = lastAppliedAppearance.extraConfigFilePaths
+            != terminalAppearance.extraConfigFilePaths
         let shouldApplyFontConfig = fontSizeChanged
             || fontFamilyChanged
-            || (force && terminalAppearance.hasRuntimeFontOverride)
+            || extraConfigFilePathsChanged
 
         if shouldApplyFontConfig {
             guard let config = runtime.makeSurfaceConfig(for: terminalAppearance) else {
@@ -532,8 +545,9 @@ public final class SurfaceContainerView: UIView, UIKeyInput, UITextInputTraits, 
         ]
 
         for (index, sublayer) in sublayers.prefix(3).enumerated() {
+            let contentsState = sublayer.contents == nil ? "nil" : "set"
             lines.append(
-                "sub[\(index)] \(String(describing: type(of: sublayer))) frame=\(describe(sublayer.frame)) bounds=\(describe(sublayer.bounds)) scale=\(sublayer.contentsScale)"
+                "sub[\(index)] \(String(describing: type(of: sublayer))) frame=\(describe(sublayer.frame)) bounds=\(describe(sublayer.bounds)) scale=\(sublayer.contentsScale) contents=\(contentsState) hidden=\(sublayer.isHidden) opacity=\(sublayer.opacity)"
             )
         }
 
