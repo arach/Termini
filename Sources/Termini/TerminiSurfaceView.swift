@@ -9,15 +9,20 @@ public struct TerminiSurfaceView: NSViewRepresentable {
     private let controller: TerminiTerminalController?
     private let showsSystemKeyboard: Bool
     private let appearance: TerminiTerminalAppearance
+    // hosts that keep several surfaces mounted (warm caches)
+    // mark all but the selected one invisible so hidden surfaces stop drawing.
+    private let isRenderVisible: Bool
 
     public init(
         controller: TerminiTerminalController? = nil,
         showsSystemKeyboard: Bool = true,
-        appearance: TerminiTerminalAppearance = .default
+        appearance: TerminiTerminalAppearance = .default,
+        isRenderVisible: Bool = true
     ) {
         self.controller = controller
         self.showsSystemKeyboard = showsSystemKeyboard
         self.appearance = appearance
+        self.isRenderVisible = isRenderVisible
     }
 
     public init(
@@ -35,12 +40,14 @@ public struct TerminiSurfaceView: NSViewRepresentable {
     public func makeNSView(context: Context) -> SurfaceContainerView {
         let view = SurfaceContainerView(runtime: .shared)
         view.terminalAppearance = appearance
+        view.isRenderVisible = isRenderVisible
         view.bind(controller: controller)
         return view
     }
 
     public func updateNSView(_ nsView: SurfaceContainerView, context: Context) {
         nsView.terminalAppearance = appearance
+        nsView.isRenderVisible = isRenderVisible
         nsView.bind(controller: controller)
     }
 }
@@ -63,12 +70,41 @@ public final class SurfaceContainerView: NSView {
     private var keyMonitor: Any?
     private weak var controller: TerminiTerminalController?
     private var lastReportedSize: TerminiTerminalSize?
+    // MARK: coalesces PTY winsize pushes during live resize.
+    private var pendingWinsizeReport: DispatchWorkItem?
+    private let liveResizeWinsizeInterval: TimeInterval = 1.0 / 12.0
     private var lastAppliedAppearance: TerminiTerminalAppearance = .default
     private let debugInputLogging = ProcessInfo.processInfo.environment["TERMBRIDGEKIT_DEBUG_INPUT"] == "1"
     private var lastMouseLog: TimeInterval = 0
     private let mouseLogInterval: TimeInterval = 0.05
     private let activeRenderInterval: TimeInterval = 1.0 / 30.0
     private let idleFocusedRenderInterval: TimeInterval = 0.5
+    // MARK: render/visibility gating (battery).
+    // A surface that can't be seen must not draw: no render timers, no
+    // per-output-chunk draws, and libghostty told via set_occlusion so its
+    // renderer idles too. Output is still *processed* (terminal state stays
+    // warm); one catch-up draw runs when the surface becomes visible again.
+    /// Whether the SwiftUI host considers this surface visible (e.g. the
+    /// selected surface of a warm cache). Set via `TerminiSurfaceView`.
+    var isRenderVisible: Bool = true {
+        didSet {
+            guard oldValue != isRenderVisible else { return }
+            renderGateChanged()
+        }
+    }
+    /// Whether the hosting window is actually on screen (occlusion state).
+    private var windowIsVisible = true
+    /// Output arrived while gated; draw once on reveal.
+    private var needsDrawOnReveal = false
+    private var occlusionObserver: NSObjectProtocol?
+    /// Immediate (non-timer) output draws are capped at ~60 fps; the active
+    /// render burst timer coalesces the rest.
+    private var lastOutputDraw: TimeInterval = 0
+    private let minOutputDrawInterval: TimeInterval = 1.0 / 60.0
+
+    private var canRender: Bool {
+        isRenderVisible && windowIsVisible && window != nil && surface != nil
+    }
     var terminalAppearance: TerminiTerminalAppearance = .default {
         didSet {
             guard oldValue != terminalAppearance else { return }
@@ -94,14 +130,32 @@ public final class SurfaceContainerView: NSView {
 
     public override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
-        guard window != nil else {
+        // follow the window's occlusion state so a surface
+        // behind other windows / on another Space / minimized stops drawing.
+        if let occlusionObserver {
+            NotificationCenter.default.removeObserver(occlusionObserver)
+            self.occlusionObserver = nil
+        }
+        guard let window else {
             stopRenderLoop()
             return
+        }
+        windowIsVisible = window.occlusionState.contains(.visible)
+        occlusionObserver = NotificationCenter.default.addObserver(
+            forName: NSWindow.didChangeOcclusionStateNotification,
+            object: window, queue: .main
+        ) { [weak self] _ in
+            guard let self else { return }
+            let visible = self.window?.occlusionState.contains(.visible) ?? false
+            guard visible != self.windowIsVisible else { return }
+            self.windowIsVisible = visible
+            self.renderGateChanged()
         }
         installKeyMonitor()
         if surface != nil {
             // Re-attached to a window (e.g. tab switch) with the surface already
             // live — scheduleSurfaceCreation() no-ops, so re-request focus here.
+            renderGateChanged()
             bringToFrontAndFocus()
         } else {
             scheduleSurfaceCreation()
@@ -126,6 +180,9 @@ public final class SurfaceContainerView: NSView {
         }
         if let keyMonitor {
             NSEvent.removeMonitor(keyMonitor)
+        }
+        if let occlusionObserver {
+            NotificationCenter.default.removeObserver(occlusionObserver)
         }
     }
 
@@ -198,8 +255,41 @@ public final class SurfaceContainerView: NSView {
         let height = UInt32(bounds.height * scale)
         ghostty_surface_set_size(surface, width, height)
         ghostty_surface_refresh(surface)
-        ghostty_surface_draw(surface)
-        requestActiveRenderBurst(duration: 0.35)
+        // sizing must always reach the surface + PTY (so
+        // tmux keeps the right dimensions), but only visible surfaces draw.
+        if canRender {
+            ghostty_surface_draw(surface)
+            requestActiveRenderBurst(duration: 0.35)
+        } else {
+            needsDrawOnReveal = true
+        }
+        // MARK: throttle the PTY winsize push.
+        scheduleWinsizeReport()
+    }
+
+    /// Coalesce PTY winsize pushes (each is a `TIOCSWINSZ` → `SIGWINCH` →
+    /// full-screen redraw in the child, e.g. tmux). A live window drag emits
+    /// ~60 layout passes/sec; collapsing them to ~12 Hz removes the redraw
+    /// storm while the *visual* surface still tracks the window every frame
+    /// (`updateSurfaceSize` already set the Ghostty grid above). The final,
+    /// authoritative size is pushed in `viewDidEndLiveResize`.
+    private func scheduleWinsizeReport() {
+        guard pendingWinsizeReport == nil else { return }
+        let work = DispatchWorkItem { [weak self] in
+            self?.pendingWinsizeReport = nil
+            self?.reportSizeIfNeeded()
+        }
+        pendingWinsizeReport = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + liveResizeWinsizeInterval, execute: work)
+    }
+
+    public override func viewDidEndLiveResize() {
+        super.viewDidEndLiveResize()
+        // Drop any throttled push and send one authoritative final size so the
+        // child ends exactly matching the settled window.
+        pendingWinsizeReport?.cancel()
+        pendingWinsizeReport = nil
+        updateSurfaceSize()
         reportSizeIfNeeded()
     }
 
@@ -210,7 +300,27 @@ public final class SurfaceContainerView: NSView {
         case focusedIdle
     }
 
+    /// flip the render gate — tell libghostty (its renderer
+    /// pauses occluded surfaces internally), stop/restart our own draw timers,
+    /// and run the catch-up draw for output that arrived while hidden.
+    private func renderGateChanged() {
+        if let surface {
+            ghostty_surface_set_occlusion(surface, canRender)
+        }
+        guard canRender else {
+            stopRenderLoop()
+            return
+        }
+        if needsDrawOnReveal, let surface {
+            needsDrawOnReveal = false
+            ghostty_surface_refresh(surface)
+            ghostty_surface_draw(surface)
+        }
+        startFocusedIdleRenderLoopIfNeeded()
+    }
+
     private func requestActiveRenderBurst(duration: TimeInterval = 0.35) {
+        guard canRender else { return }   // no bursts while hidden
         renderBurstDeadline = max(renderBurstDeadline, Date().addingTimeInterval(duration))
         startRenderLoop(mode: .active, interval: activeRenderInterval)
     }
@@ -224,6 +334,7 @@ public final class SurfaceContainerView: NSView {
     }
 
     private func startRenderLoop(mode: RenderTimerMode, interval: TimeInterval) {
+        guard canRender else { return }   // hidden surfaces run no timers
         if renderTimer != nil, renderTimerMode == mode {
             return
         }
@@ -233,6 +344,8 @@ public final class SurfaceContainerView: NSView {
         let timer = Timer(timeInterval: interval, repeats: true) { [weak self] _ in
             self?.drawScheduledFrame()
         }
+        // tolerance lets the OS coalesce these wakeups.
+        timer.tolerance = interval * 0.2
         RunLoop.main.add(timer, forMode: .common)
         renderTimer = timer
     }
@@ -246,6 +359,12 @@ public final class SurfaceContainerView: NSView {
     private func drawScheduledFrame() {
         guard let surface else {
             stopRenderLoop()
+            return
+        }
+        // the gate closed since this timer started.
+        guard canRender else {
+            stopRenderLoop()
+            needsDrawOnReveal = true
             return
         }
 
@@ -301,6 +420,9 @@ public final class SurfaceContainerView: NSView {
 
         guard let created = ghostty_surface_new(app, &cfg) else { return }
         surface = created
+        // seed the render gate (a warm surface can be
+        // created while another one is selected, or the window occluded).
+        ghostty_surface_set_occlusion(created, canRender)
         setSurfaceFocus(true)
         updateSurfaceSize()
         ghostty_surface_refresh(created)
@@ -395,8 +517,21 @@ public final class SurfaceContainerView: NSView {
             guard let ptr = buffer.bindMemory(to: CChar.self).baseAddress else { return }
             ghostty_surface_process_output(surface, ptr, UInt(data.count))
         }
+        // hidden surfaces absorb output without drawing (a
+        // busy background session must not render invisibly); the reveal path
+        // does one catch-up draw. Visible surfaces draw immediately for snappy
+        // echo, but immediate draws are capped at ~60 fps — under an output
+        // flood the burst timer coalesces frames instead of drawing per chunk.
+        guard canRender else {
+            needsDrawOnReveal = true
+            return
+        }
         ghostty_surface_refresh(surface)
-        ghostty_surface_draw(surface)
+        let now = ProcessInfo.processInfo.systemUptime
+        if now - lastOutputDraw >= minOutputDrawInterval {
+            lastOutputDraw = now
+            ghostty_surface_draw(surface)
+        }
         requestActiveRenderBurst(duration: 0.35)
     }
 

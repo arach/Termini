@@ -5,15 +5,19 @@ public struct TerminiTerminalView: View {
     private let controller: TerminiTerminalController?
     private let showsSystemKeyboard: Bool
     private let appearance: TerminiTerminalAppearance
+    // render gate for warm-cached surfaces (see TerminiSurfaceView).
+    private let isRenderVisible: Bool
 
     public init(
         controller: TerminiTerminalController? = nil,
         showsSystemKeyboard: Bool = true,
-        appearance: TerminiTerminalAppearance = .default
+        appearance: TerminiTerminalAppearance = .default,
+        isRenderVisible: Bool = true
     ) {
         self.controller = controller
         self.showsSystemKeyboard = showsSystemKeyboard
         self.appearance = appearance
+        self.isRenderVisible = isRenderVisible
     }
 
     public init(
@@ -32,7 +36,8 @@ public struct TerminiTerminalView: View {
         TerminiSurfaceView(
             controller: controller,
             showsSystemKeyboard: showsSystemKeyboard,
-            appearance: appearance
+            appearance: appearance,
+            isRenderVisible: isRenderVisible
         )
             .background(terminalBackground)
     }

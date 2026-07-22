@@ -13,7 +13,8 @@ public struct TerminiSurfaceView: UIViewRepresentable {
     public init(
         controller: TerminiTerminalController? = nil,
         showsSystemKeyboard: Bool = true,
-        appearance: TerminiTerminalAppearance = .default
+        appearance: TerminiTerminalAppearance = .default,
+        isRenderVisible: Bool = true   // macOS-only render gate; ignored on iOS
     ) {
         self.controller = controller
         self.showsSystemKeyboard = showsSystemKeyboard
