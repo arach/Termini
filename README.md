@@ -314,6 +314,12 @@ automatically. The helper scripts do the work:
 ./scripts/package-ghosttykit-release.sh
 ```
 
+The build helper applies the tracked patches for the pinned Ghostty release
+from `patches/ghostty/0.1.6/` before compiling. Override that source with
+`--patch-dir` when porting Termini to another Ghostty revision. Release
+packaging also verifies that the iOS Simulator slice is a universal arm64 +
+x86_64 archive, so Intel-compatible artifacts cannot be published accidentally.
+
 ---
 
 ## Good to know

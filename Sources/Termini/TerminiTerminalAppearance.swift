@@ -216,15 +216,21 @@ public struct TerminiTerminalAppearance: Hashable, Codable, Sendable {
     public var theme: TerminiTerminalTheme?
     public var fontSize: Double?
     public var fontFamily: TerminiTerminalFontFamily?
+    /// Extra libghostty config files to load into each surface's config (applied
+    /// after fonts, before finalize). Host apps can use this to inject colours
+    /// or any other ghostty config keys the C API has no per-key setter for.
+    public var extraConfigFilePaths: [String]
 
     public init(
         theme: TerminiTerminalTheme? = nil,
         fontSize: Double? = nil,
-        fontFamily: TerminiTerminalFontFamily? = nil
+        fontFamily: TerminiTerminalFontFamily? = nil,
+        extraConfigFilePaths: [String] = []
     ) {
         self.theme = theme
         self.fontSize = fontSize
         self.fontFamily = fontFamily
+        self.extraConfigFilePaths = extraConfigFilePaths
     }
 
     public static let `default` = TerminiTerminalAppearance()

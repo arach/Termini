@@ -12,6 +12,7 @@ public struct TerminiConnectionConfig: Codable, Equatable, Sendable {
         case privateKeyPEM
         case term
         case startupCommand
+        case useExecRequest
         case hostKeyPolicy
         case hostKeyFingerprint
     }
@@ -50,6 +51,7 @@ public struct TerminiConnectionConfig: Codable, Equatable, Sendable {
     public var privateKeyPEM: String
     public var term: String
     public var startupCommand: String
+    public var useExecRequest: Bool
     public var hostKeyPolicy: TerminiSSHHostKeyPolicy
     public var hostKeyFingerprint: String
 
@@ -63,6 +65,7 @@ public struct TerminiConnectionConfig: Codable, Equatable, Sendable {
         privateKeyPEM: String = "",
         term: String = "xterm-256color",
         startupCommand: String = "",
+        useExecRequest: Bool = false,
         hostKeyPolicy: TerminiSSHHostKeyPolicy = .trustOnFirstUse,
         hostKeyFingerprint: String = ""
     ) {
@@ -75,6 +78,7 @@ public struct TerminiConnectionConfig: Codable, Equatable, Sendable {
         self.privateKeyPEM = privateKeyPEM
         self.term = term
         self.startupCommand = startupCommand
+        self.useExecRequest = useExecRequest
         self.hostKeyPolicy = hostKeyPolicy
         self.hostKeyFingerprint = hostKeyFingerprint
     }
@@ -91,6 +95,7 @@ public struct TerminiConnectionConfig: Codable, Equatable, Sendable {
         self.privateKeyPEM = try container.decodeIfPresent(String.self, forKey: .privateKeyPEM) ?? ""
         self.term = try container.decodeIfPresent(String.self, forKey: .term) ?? "xterm-256color"
         self.startupCommand = try container.decodeIfPresent(String.self, forKey: .startupCommand) ?? ""
+        self.useExecRequest = try container.decodeIfPresent(Bool.self, forKey: .useExecRequest) ?? false
         self.hostKeyPolicy = try container.decodeIfPresent(TerminiSSHHostKeyPolicy.self, forKey: .hostKeyPolicy) ?? .trustOnFirstUse
         self.hostKeyFingerprint = try container.decodeIfPresent(String.self, forKey: .hostKeyFingerprint) ?? ""
     }
@@ -106,6 +111,7 @@ public struct TerminiConnectionConfig: Codable, Equatable, Sendable {
         try container.encode(privateKeyPEM, forKey: .privateKeyPEM)
         try container.encode(term, forKey: .term)
         try container.encode(startupCommand, forKey: .startupCommand)
+        try container.encode(useExecRequest, forKey: .useExecRequest)
         try container.encode(hostKeyPolicy, forKey: .hostKeyPolicy)
         try container.encode(hostKeyFingerprint, forKey: .hostKeyFingerprint)
     }
@@ -181,6 +187,7 @@ public struct TerminiConnectionConfig: Codable, Equatable, Sendable {
             privateKeyPEM: authenticationMode == .privateKey ? normalizedPrivateKey(privateKeyPEM) : nil,
             term: nonEmpty(term) ?? "xterm-256color",
             startupCommand: nonEmpty(startupCommand),
+            useExecRequest: useExecRequest,
             hostKeyPolicy: hostKeyPolicy,
             hostKeyFingerprint: nonEmpty(hostKeyFingerprint)
         )

@@ -13,6 +13,13 @@ public struct TerminiSSHConfiguration: Equatable, Sendable {
     public var privateKeyPEM: String?
     public var term: String
     public var startupCommand: String?
+    // Run `startupCommand` as an SSH *exec* request
+    // instead of typing it into an interactive shell after a delay. Exec gives
+    // a clean byte stream (no shell echo/prompt/rc noise — required for
+    // protocol channels like `tmux -C`) and a real exit status when the
+    // command dies. Default false so existing shell-typed call sites keep
+    // their behavior.
+    public var useExecRequest: Bool
     public var hostKeyPolicy: TerminiSSHHostKeyPolicy
     public var hostKeyFingerprint: String?
 
@@ -24,6 +31,7 @@ public struct TerminiSSHConfiguration: Equatable, Sendable {
         privateKeyPEM: String? = nil,
         term: String = "xterm-256color",
         startupCommand: String? = nil,
+        useExecRequest: Bool = false,
         hostKeyPolicy: TerminiSSHHostKeyPolicy = .trustOnFirstUse,
         hostKeyFingerprint: String? = nil
     ) {
@@ -34,6 +42,7 @@ public struct TerminiSSHConfiguration: Equatable, Sendable {
         self.privateKeyPEM = privateKeyPEM
         self.term = term
         self.startupCommand = startupCommand
+        self.useExecRequest = useExecRequest
         self.hostKeyPolicy = hostKeyPolicy
         self.hostKeyFingerprint = hostKeyFingerprint
     }
@@ -65,6 +74,13 @@ public final class TerminiSSHSession {
     private var terminalRows = 34
     private var terminalPixelWidth = 0
     private var terminalPixelHeight = 0
+
+    // MARK: Raw output sink.
+    // When set, remote bytes (and [Termini] status lines) bypass the terminal
+    // controller and go straight to this closure. Lets a protocol client (e.g.
+    // a `tmux -C` control channel) reuse the whole SSH session machinery
+    // without pretending to be a rendered terminal.
+    public var onRawOutput: ((Data) -> Void)?
 
     public init(controller: TerminiTerminalController) {
         self.controller = controller
@@ -146,13 +162,16 @@ public final class TerminiSSHSession {
         let initialPixelWidth = terminalPixelWidth
         let initialPixelHeight = terminalPixelHeight
 
+        // In exec mode the command runs as the channel's
+        // exec request; only shell mode types it into the remote shell.
+        let useExec = configuration.useExecRequest && !(startupCommand ?? "").isEmpty
         let readyCallback: @Sendable () -> Void = { [weak self] in
             Task { @MainActor [weak self] in
                 guard let self else { return }
                 self.status = .connected
                 self.appendStatusLine("[Termini] Connected")
 
-                guard let startupCommand, !startupCommand.isEmpty else { return }
+                guard !useExec, let startupCommand, !startupCommand.isEmpty else { return }
                 try? await Task.sleep(for: .milliseconds(180))
                 self.send("\(startupCommand)\r")
             }
@@ -160,7 +179,7 @@ public final class TerminiSSHSession {
 
         let outputCallback: @Sendable (Data) -> Void = { [weak self] data in
             Task { @MainActor [weak self] in
-                self?.controller.processRemoteOutput(data)
+                self?.emitOutput(data)
             }
         }
 
@@ -216,6 +235,7 @@ public final class TerminiSSHSession {
                         return childChannel.pipeline.addHandler(
                             ChannelHandler(
                                 term: configuration.term,
+                                execCommand: useExec ? startupCommand : nil,
                                 initialColumns: initialColumns,
                                 initialRows: initialRows,
                                 initialPixelWidth: initialPixelWidth,
@@ -320,8 +340,18 @@ public final class TerminiSSHSession {
         status = .failed(message)
     }
 
+    /// Single output funnel — raw sink when set, else the
+    /// terminal controller.
+    private func emitOutput(_ data: Data) {
+        if let onRawOutput {
+            onRawOutput(data)
+        } else {
+            controller.processRemoteOutput(data)
+        }
+    }
+
     private func appendStatusLine(_ line: String) {
-        controller.processRemoteOutput(Data("\(line)\r\n".utf8))
+        emitOutput(Data("\(line)\r\n".utf8))
     }
 
     private func resetTerminalSurface() {
@@ -553,6 +583,8 @@ extension TerminiSSHSession {
         typealias OutboundOut = SSHChannelData
 
         private let term: String
+        // Non-nil → request exec(command) instead of a shell.
+        private let execCommand: String?
         private let initialColumns: Int
         private let initialRows: Int
         private let initialPixelWidth: Int
@@ -564,6 +596,7 @@ extension TerminiSSHSession {
 
         init(
             term: String,
+            execCommand: String? = nil,
             initialColumns: Int,
             initialRows: Int,
             initialPixelWidth: Int,
@@ -574,6 +607,7 @@ extension TerminiSSHSession {
             onError: @escaping @Sendable (Error) -> Void
         ) {
             self.term = term
+            self.execCommand = execCommand
             self.initialColumns = initialColumns
             self.initialRows = initialRows
             self.initialPixelWidth = initialPixelWidth
@@ -591,6 +625,29 @@ extension TerminiSSHSession {
         }
 
         func channelActive(context: ChannelHandlerContext) {
+            // tmux decides whether a client is UTF-8 capable from the SSH
+            // session locale. Without these requests, servers commonly start
+            // the shell in the C locale and tmux substitutes Nerd Font and
+            // other non-ASCII cells with underscores before bytes ever reach
+            // Termini's renderer.
+            for (name, value) in [
+                ("LANG", "en_US.UTF-8"),
+                ("LC_CTYPE", "en_US.UTF-8"),
+            ] {
+                context.triggerUserOutboundEvent(
+                    SSHChannelRequestEvent.EnvironmentRequest(
+                        wantReply: false,
+                        name: name,
+                        value: value
+                    ),
+                    promise: nil
+                )
+            }
+
+            // RFC 8160 reserves opcode 42 for IUTF8. NIOSSH intentionally
+            // supports raw opcodes so clients can negotiate modes newer than
+            // its named convenience constants.
+            let iutf8 = SSHTerminalModes.Opcode(rawValue: 42)
             let ptyRequest = SSHChannelRequestEvent.PseudoTerminalRequest(
                 wantReply: true,
                 term: term,
@@ -598,17 +655,26 @@ extension TerminiSSHSession {
                 terminalRowHeight: initialRows,
                 terminalPixelWidth: initialPixelWidth,
                 terminalPixelHeight: initialPixelHeight,
-                terminalModes: SSHTerminalModes([:])
+                terminalModes: SSHTerminalModes([iutf8: 1])
             )
 
             let ptyPromise = context.eventLoop.makePromise(of: Void.self)
             let shellPromise = context.eventLoop.makePromise(of: Void.self)
 
+            // Exec the command directly when configured.
+            let execCommand = self.execCommand
             ptyPromise.futureResult.whenSuccess {
-                context.triggerUserOutboundEvent(
-                    SSHChannelRequestEvent.ShellRequest(wantReply: true),
-                    promise: shellPromise
-                )
+                if let execCommand {
+                    context.triggerUserOutboundEvent(
+                        SSHChannelRequestEvent.ExecRequest(command: execCommand, wantReply: true),
+                        promise: shellPromise
+                    )
+                } else {
+                    context.triggerUserOutboundEvent(
+                        SSHChannelRequestEvent.ShellRequest(wantReply: true),
+                        promise: shellPromise
+                    )
+                }
             }
 
             ptyPromise.futureResult.whenFailure { [onError] error in

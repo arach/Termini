@@ -1,0 +1,57 @@
+diff --git a/src/build/GhosttyXCFramework.zig b/src/build/GhosttyXCFramework.zig
+index a19dd18af..3d67ac1a1 100644
+--- a/src/build/GhosttyXCFramework.zig
++++ b/src/build/GhosttyXCFramework.zig
+@@ -4,6 +4,7 @@ const std = @import("std");
+ const Config = @import("Config.zig");
+ const SharedDeps = @import("SharedDeps.zig");
+ const GhosttyLib = @import("GhosttyLib.zig");
++const LipoStep = @import("LipoStep.zig");
+ const XCFrameworkStep = @import("XCFrameworkStep.zig");
+ const Target = @import("xcframework.zig").Target;
+
+@@ -35,8 +36,9 @@ pub fn init(
+         }),
+     ));
+
+-    // iOS Simulator
+-    const ios_sim = try GhosttyLib.initStatic(b, &try deps.retarget(
++    // iOS Simulator. Build both architectures so downstream Swift packages can
++    // produce a universal Simulator binary for Apple Silicon and Intel Macs.
++    const ios_sim_arm64 = try GhosttyLib.initStatic(b, &try deps.retarget(
+         b,
+         b.resolveTargetQuery(.{
+             .cpu_arch = .aarch64,
+@@ -52,6 +54,21 @@ pub fn init(
+             .cpu_model = .{ .explicit = &std.Target.aarch64.cpu.apple_a17 },
+         }),
+     ));
++    const ios_sim_x86_64 = try GhosttyLib.initStatic(b, &try deps.retarget(
++        b,
++        b.resolveTargetQuery(.{
++            .cpu_arch = .x86_64,
++            .os_tag = .ios,
++            .os_version_min = Config.osVersionMin(.ios),
++            .abi = .simulator,
++        }),
++    ));
++    const ios_sim_universal = LipoStep.create(b, .{
++        .name = "ghostty-ios-simulator",
++        .out_name = "libghostty-internal-fat.a",
++        .input_a = ios_sim_arm64.output,
++        .input_b = ios_sim_x86_64.output,
++    });
+
+     // Generate a headers directory with only ghostty.h and the module
+     // map. We can't use include/ directly because it also contains the
+@@ -81,9 +98,9 @@ pub fn init(
+                     .dsym = ios.dsym,
+                 },
+                 .{
+-                    .library = ios_sim.output,
++                    .library = ios_sim_universal.output,
+                     .headers = headers,
+-                    .dsym = ios_sim.dsym,
++                    .dsym = null,
+                 },
+             },
