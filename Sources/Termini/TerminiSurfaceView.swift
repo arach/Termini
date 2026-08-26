@@ -4,6 +4,16 @@ import AppKit
 import SwiftUI
 import GhosttyKit
 
+enum TerminiMouseButtonSequence {
+    static func perform(
+        updatePosition: () -> Void,
+        sendButton: () -> Void
+    ) {
+        updatePosition()
+        sendButton()
+    }
+}
+
 /// SwiftUI wrapper that embeds the live Ghostty surface.
 public struct TerminiSurfaceView: NSViewRepresentable {
     private let controller: TerminiTerminalController?
@@ -885,9 +895,11 @@ public final class SurfaceContainerView: NSView {
         guard let surface else { return }
         let mods = modsFromFlags(event.modifierFlags)
         let button = mouseButton(from: event)
-        ghostty_surface_mouse_button(surface, state, button, mods)
+        TerminiMouseButtonSequence.perform(
+            updatePosition: { sendMouseMove(event) },
+            sendButton: { ghostty_surface_mouse_button(surface, state, button, mods) }
+        )
         requestActiveRenderBurst(duration: 0.35)
-        sendMouseMove(event)
     }
 
     private func sendMouseMove(_ event: NSEvent) {
