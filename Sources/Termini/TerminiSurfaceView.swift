@@ -14,6 +14,39 @@ enum TerminiMouseButtonSequence {
     }
 }
 
+enum TerminiModifierKeyEvent {
+    static func action(
+        keyCode: UInt16,
+        modifierFlags: NSEvent.ModifierFlags
+    ) -> ghostty_input_action_e? {
+        let flag: NSEvent.ModifierFlags
+        switch keyCode {
+        case 54, 55:
+            flag = .command
+        case 56, 60:
+            flag = .shift
+        case 57:
+            flag = .capsLock
+        case 58, 61:
+            flag = .option
+        case 59, 62:
+            flag = .control
+        case 63:
+            flag = .function
+        default:
+            return nil
+        }
+
+        return modifierFlags.contains(flag) ? GHOSTTY_ACTION_PRESS : GHOSTTY_ACTION_RELEASE
+    }
+}
+
+enum TerminiKeyEventText {
+    static func canReadCharacters(from eventType: NSEvent.EventType) -> Bool {
+        eventType == .keyDown || eventType == .keyUp
+    }
+}
+
 /// SwiftUI wrapper that embeds the live Ghostty surface.
 public struct TerminiSurfaceView: NSViewRepresentable {
     private let controller: TerminiTerminalController?
@@ -725,6 +758,17 @@ public final class SurfaceContainerView: NSView {
         sendKeyEvent(event, action: GHOSTTY_ACTION_RELEASE)
     }
 
+    public override func flagsChanged(with event: NSEvent) {
+        guard let action = TerminiModifierKeyEvent.action(
+            keyCode: event.keyCode,
+            modifierFlags: event.modifierFlags
+        ) else {
+            super.flagsChanged(with: event)
+            return
+        }
+        sendKeyEvent(event, action: action)
+    }
+
     public override func performKeyEquivalent(with event: NSEvent) -> Bool {
         guard event.type == .keyDown else { return false }
         guard window?.firstResponder === self else { return false }
@@ -767,6 +811,7 @@ public final class SurfaceContainerView: NSView {
     }
 
     private func translatedText(from event: NSEvent) -> String? {
+        guard TerminiKeyEventText.canReadCharacters(from: event.type) else { return nil }
         guard let chars = event.characters else { return nil }
         if chars.count == 1, let scalar = chars.unicodeScalars.first {
             // Let Ghostty handle control characters itself.
@@ -940,21 +985,27 @@ public final class SurfaceContainerView: NSView {
 
     private func installKeyMonitor() {
         guard keyMonitor == nil else { return }
-        keyMonitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .keyUp]) { [weak self] event in
+        keyMonitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .keyUp, .flagsChanged]) { [weak self] event in
             guard let self else { return event }
             guard event.window == self.window, self.window?.firstResponder === self else {
                 return event
             }
-            self.logInput("monitor saw \(event.type == .keyDown ? "down" : "up") keyCode=\(event.keyCode) mods=0x\(String(self.modsFromFlags(event.modifierFlags).rawValue, radix: 16)) isKeyWindow=\(self.window?.isKeyWindow == true) firstResponder=\(String(describing: self.window?.firstResponder))")
-            if event.modifierFlags.contains(.command) {
-                return event
-            }
+            self.logInput("monitor saw \(event.type) keyCode=\(event.keyCode) mods=0x\(String(self.modsFromFlags(event.modifierFlags).rawValue, radix: 16)) isKeyWindow=\(self.window?.isKeyWindow == true) firstResponder=\(String(describing: self.window?.firstResponder))")
             switch event.type {
             case .keyDown:
+                if event.modifierFlags.contains(.command) { return event }
                 self.sendKeyEvent(event, action: event.isARepeat ? GHOSTTY_ACTION_REPEAT : GHOSTTY_ACTION_PRESS)
                 return nil
             case .keyUp:
+                if event.modifierFlags.contains(.command) { return event }
                 self.sendKeyEvent(event, action: GHOSTTY_ACTION_RELEASE)
+                return nil
+            case .flagsChanged:
+                guard let action = TerminiModifierKeyEvent.action(
+                    keyCode: event.keyCode,
+                    modifierFlags: event.modifierFlags
+                ) else { return event }
+                self.sendKeyEvent(event, action: action)
                 return nil
             default:
                 return event
