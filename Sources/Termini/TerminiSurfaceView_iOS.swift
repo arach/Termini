@@ -381,6 +381,9 @@ public final class SurfaceContainerView: UIView, UIKeyInput, UITextInputTraits, 
         }
     }
 
+    /// See TerminiSurfaceView.outputDrainChunk - same deadlock, same cure.
+    private static let outputDrainChunk = 4 * 1024
+
     private func processRemoteOutput(_ data: Data) {
         guard !data.isEmpty else { return }
         // Buffer until the surface exists and has been ticked — feeding an
@@ -391,7 +394,15 @@ public final class SurfaceContainerView: UIView, UIKeyInput, UITextInputTraits, 
         }
         data.withUnsafeBytes { buffer in
             guard let ptr = buffer.bindMemory(to: CChar.self).baseAddress else { return }
-            ghostty_surface_process_output(surface, ptr, UInt(data.count))
+            var offset = 0
+            while offset < data.count {
+                let length = min(Self.outputDrainChunk, data.count - offset)
+                ghostty_surface_process_output(surface, ptr + offset, UInt(length))
+                offset += length
+                // Drain between chunks - see the macOS surface for the full
+                // story; the queue's only drainer runs on this same thread.
+                runtime.tick()
+            }
         }
         ghostty_surface_refresh(surface)
         ghostty_surface_draw(surface)
