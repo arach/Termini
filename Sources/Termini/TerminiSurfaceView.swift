@@ -383,6 +383,16 @@ public final class SurfaceContainerView: NSView {
         }
     }
 
+    /// Bytes handed to `ghostty_surface_process_output` per call before the
+    /// app is ticked. The surface's IO queue is drained by `ghostty_app_tick`,
+    /// which runs on the main thread — the same thread process_output blocks
+    /// on once the queue fills. One initial tick (scheduleInitialAppearance)
+    /// is not enough: a sustained burst (session replay, a busy agent) refills
+    /// the queue mid-stream and parks the main thread on the IO futex with
+    /// nothing left to drain it. Kept well below the queue's capacity so a
+    /// single chunk can never fill it from empty.
+    private static let outputDrainChunk = 4 * 1024
+
     private func processRemoteOutput(_ data: Data) {
         guard !data.isEmpty else { return }
         // Buffer until the surface exists and has been ticked — feeding an
@@ -393,7 +403,16 @@ public final class SurfaceContainerView: NSView {
         }
         data.withUnsafeBytes { buffer in
             guard let ptr = buffer.bindMemory(to: CChar.self).baseAddress else { return }
-            ghostty_surface_process_output(surface, ptr, UInt(data.count))
+            var offset = 0
+            while offset < data.count {
+                let length = min(Self.outputDrainChunk, data.count - offset)
+                ghostty_surface_process_output(surface, ptr + offset, UInt(length))
+                offset += length
+                // Drain between chunks, not only after the last one — the
+                // whole point is that the queue never reaches full while the
+                // only thread able to empty it is the one writing.
+                runtime.tick()
+            }
         }
         ghostty_surface_refresh(surface)
         ghostty_surface_draw(surface)
