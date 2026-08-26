@@ -141,8 +141,12 @@ final class TerminiRuntime: ObservableObject {
         target: ghostty_target_s,
         action: ghostty_action_s
     ) -> Bool {
-        // For now we acknowledge all actions without special handling.
-        return true
+        switch action.tag {
+        case GHOSTTY_ACTION_OPEN_URL:
+            return TerminiOpenURLAction.handle(action.action.open_url)
+        default:
+            return true
+        }
     }
 
     private static func surfaceView(
