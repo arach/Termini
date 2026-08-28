@@ -52,6 +52,7 @@ demos, and go deeper.
 - 🐚 **Local shell on macOS** — `TerminiLocalPTYWorkspace` runs a `forkpty`-backed login shell.
 - 🔌 **SSH on macOS + iOS** — `TerminiSSHWorkspace` over SwiftNIO/NIOSSH, with trust-on-first-use host keys.
 - 🎨 **Themes & fonts** — `TerminiTerminalAppearance` for reusable color/font profiles.
+- 📋 **System clipboard writes on macOS** — OSC 52 writes text when the Ghostty policy allows it.
 - 🧩 **Bring-your-own transport** — wire `TerminiTerminalController` to any byte stream you like.
 - 📦 **Zero manual setup** — SwiftPM downloads the prebuilt `GhosttyKit.xcframework` for you.
 
