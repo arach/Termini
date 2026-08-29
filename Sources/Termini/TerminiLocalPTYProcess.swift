@@ -53,13 +53,16 @@ public final class TerminiLocalPTYProcess: @unchecked Sendable {
     public var onExit: (@Sendable (Int32) -> Void)?
 
     private let queue = DispatchQueue(label: "dev.arach.Termini.local-pty")
+    private let queueKey = DispatchSpecificKey<Void>()
     private var masterFileDescriptor: Int32 = -1
     private var childPID: pid_t = 0
     private var readSource: DispatchSourceRead?
     private var processSource: DispatchSourceProcess?
     private var lastRequestedSize: Size = .default
 
-    public init() {}
+    public init() {
+        queue.setSpecific(key: queueKey, value: ())
+    }
 
     deinit {
         terminate()
@@ -190,14 +193,22 @@ public final class TerminiLocalPTYProcess: @unchecked Sendable {
     }
 
     public func terminate() {
-        queue.sync {
-            guard childPID > 0 else {
-                cleanup()
-                return
+        if DispatchQueue.getSpecific(key: queueKey) != nil {
+            terminateOnQueue()
+        } else {
+            queue.sync {
+                terminateOnQueue()
             }
-
-            _ = kill(childPID, SIGTERM)
         }
+    }
+
+    private func terminateOnQueue() {
+        guard childPID > 0 else {
+            cleanup()
+            return
+        }
+
+        _ = kill(childPID, SIGTERM)
     }
 
     private func configureSources() {
