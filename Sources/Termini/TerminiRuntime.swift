@@ -86,7 +86,14 @@ final class TerminiRuntime: ObservableObject {
             confirm_read_clipboard_cb: { userdata, string, state, _ in
                 TerminiRuntime.confirmReadClipboard(userdata, string: string, state: state)
             },
-            write_clipboard_cb: { _, _, _, _, _ in
+            write_clipboard_cb: { userdata, location, content, count, requiresConfirmation in
+                TerminiRuntime.writeClipboard(
+                    userdata,
+                    location: location,
+                    content: content,
+                    count: count,
+                    requiresConfirmation: requiresConfirmation
+                )
             },
             write_to_host_cb: { surfaceUserdata, bytes, count in
                 TerminiRuntime.writeToHost(surfaceUserdata, bytes, count)
@@ -178,6 +185,24 @@ final class TerminiRuntime: ObservableObject {
         guard let view = surfaceView(from: userdata),
               let string else { return }
         view.completeClipboardRequest(String(cString: string), state: state, confirmed: true)
+        #endif
+    }
+
+    private static func writeClipboard(
+        _ userdata: UnsafeMutableRawPointer?,
+        location: ghostty_clipboard_e,
+        content: UnsafePointer<ghostty_clipboard_content_s>?,
+        count: Int,
+        requiresConfirmation: Bool
+    ) {
+        #if canImport(AppKit)
+        guard let view = surfaceView(from: userdata) else { return }
+        view.writeClipboard(
+            location: location,
+            content: content,
+            count: count,
+            requiresConfirmation: requiresConfirmation
+        )
         #endif
     }
 

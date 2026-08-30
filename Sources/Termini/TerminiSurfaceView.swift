@@ -1063,6 +1063,35 @@ public final class SurfaceContainerView: NSView {
         }
     }
 
+    func writeClipboard(
+        location: ghostty_clipboard_e,
+        content: UnsafePointer<ghostty_clipboard_content_s>?,
+        count: Int,
+        requiresConfirmation: Bool
+    ) {
+        guard !requiresConfirmation,
+              let pasteboard = pasteboard(for: location),
+              let content,
+              count > 0 else {
+            return
+        }
+
+        let entries = (0..<count).compactMap { index -> ClipboardEntry? in
+            let item = content[index]
+            guard let mime = item.mime.flatMap(String.init(validatingCString:)),
+                  let value = item.data.flatMap(String.init(validatingCString:)) else {
+                return nil
+            }
+            return ClipboardEntry(type: pasteboardType(for: mime), value: value)
+        }
+        guard !entries.isEmpty else { return }
+
+        pasteboard.declareTypes(entries.map(\.type), owner: nil)
+        for entry in entries {
+            pasteboard.setString(entry.value, forType: entry.type)
+        }
+    }
+
     private func pasteFromClipboard() -> Bool {
         guard let surface else { return false }
         let action = "paste_from_clipboard"
@@ -1093,6 +1122,15 @@ public final class SurfaceContainerView: NSView {
 
         return pasteboard.string(forType: .string)
     }
+
+    private func pasteboardType(for mime: String) -> NSPasteboard.PasteboardType {
+        mime == "text/plain" ? .string : NSPasteboard.PasteboardType(mime)
+    }
+}
+
+private struct ClipboardEntry {
+    let type: NSPasteboard.PasteboardType
+    let value: String
 }
 
 private extension TerminiTerminalTheme {
