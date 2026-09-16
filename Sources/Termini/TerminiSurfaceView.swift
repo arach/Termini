@@ -113,6 +113,8 @@ public final class SurfaceContainerView: NSView {
     private var keyMonitor: Any?
     private weak var controller: TerminiTerminalController?
     private var lastReportedSize: TerminiTerminalSize?
+    private var lastSurfacePixelSize: CGSize?
+    private var lastSurfaceScale: Double?
     // MARK: coalesces PTY winsize pushes during live resize.
     private var pendingWinsizeReport: DispatchWorkItem?
     private let liveResizeWinsizeInterval: TimeInterval = 1.0 / 12.0
@@ -140,10 +142,6 @@ public final class SurfaceContainerView: NSView {
     /// Output arrived while gated; draw once on reveal.
     private var needsDrawOnReveal = false
     private var occlusionObserver: NSObjectProtocol?
-    /// Immediate (non-timer) output draws are capped at ~60 fps; the active
-    /// render burst timer coalesces the rest.
-    private var lastOutputDraw: TimeInterval = 0
-    private let minOutputDrawInterval: TimeInterval = 1.0 / 60.0
 
     private var canRender: Bool {
         isRenderVisible && windowIsVisible && window != nil && surface != nil
@@ -180,7 +178,7 @@ public final class SurfaceContainerView: NSView {
             self.occlusionObserver = nil
         }
         guard let window else {
-            stopRenderLoop()
+            renderGateChanged()
             return
         }
         windowIsVisible = window.occlusionState.contains(.visible)
@@ -293,9 +291,13 @@ public final class SurfaceContainerView: NSView {
         guard let surface else { return }
         guard bounds.width > 0, bounds.height > 0 else { return }
         let scale = Double(window?.backingScaleFactor ?? NSScreen.main?.backingScaleFactor ?? 1.0)
-        ghostty_surface_set_content_scale(surface, scale, scale)
         let width = UInt32(bounds.width * scale)
         let height = UInt32(bounds.height * scale)
+        let pixels = CGSize(width: Int(width), height: Int(height))
+        guard pixels != lastSurfacePixelSize || scale != lastSurfaceScale else { return }
+        lastSurfacePixelSize = pixels
+        lastSurfaceScale = scale
+        ghostty_surface_set_content_scale(surface, scale, scale)
         ghostty_surface_set_size(surface, width, height)
         ghostty_surface_refresh(surface)
         // sizing must always reach the surface + PTY (so
@@ -579,22 +581,12 @@ public final class SurfaceContainerView: NSView {
                 runtime.tick()
             }
         }
-        // hidden surfaces absorb output without drawing (a
-        // busy background session must not render invisibly); the reveal path
-        // does one catch-up draw. Visible surfaces draw immediately for snappy
-        // echo, but immediate draws are capped at ~60 fps — under an output
-        // flood the burst timer coalesces frames instead of drawing per chunk.
-        guard canRender else {
-            needsDrawOnReveal = true
-            return
-        }
-        ghostty_surface_refresh(surface)
-        let now = ProcessInfo.processInfo.systemUptime
-        if now - lastOutputDraw >= minOutputDrawInterval {
-            lastOutputDraw = now
-            ghostty_surface_draw(surface)
-        }
-        requestActiveRenderBurst(duration: 0.35)
+        // process_output already queues a render in libghostty. Forcing a
+        // host draw here waits synchronously for Metal on the main thread;
+        // refreshing and starting a host timer also duplicate that scheduling.
+        // Keep parsing/ticking independent from presentation, including while
+        // occluded. The existing reveal path requests a catch-up frame.
+        if !canRender { needsDrawOnReveal = true }
     }
 
     private func applyTerminalAppearanceIfNeeded(force: Bool) {
