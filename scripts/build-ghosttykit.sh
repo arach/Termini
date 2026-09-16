@@ -9,6 +9,7 @@ GHOSTTY_DIR="${GHOSTTY_DIR:-${REPO_ROOT}/vendor/ghostty}"
 GHOSTTY_REPO="${GHOSTTY_REPO:-https://github.com/ghostty-org/ghostty.git}"
 GHOSTTY_REF="${GHOSTTY_REF:-}"
 GHOSTTY_OPTIMIZE="${GHOSTTY_OPTIMIZE:-ReleaseFast}"
+GHOSTTY_XCFRAMEWORK_TARGET="${GHOSTTY_XCFRAMEWORK_TARGET:-universal}"
 GHOSTTY_PATCH_DIR="${GHOSTTY_PATCH_DIR:-${REPO_ROOT}/patches/ghostty/0.1.6}"
 SHOULD_FETCH=0
 
@@ -21,6 +22,7 @@ Options:
   --ref REF            Git ref to check out before building.
   --fetch              Fetch origin before checking out REF.
   --optimize MODE      Zig optimize mode. Default: ${GHOSTTY_OPTIMIZE}
+  --xcframework-target TARGET  native (current Mac) or universal. Default: ${GHOSTTY_XCFRAMEWORK_TARGET}
   --patch-dir PATH     Patches for the pinned Ghostty source. Default: ${GHOSTTY_PATCH_DIR}
 
 Env:
@@ -28,6 +30,7 @@ Env:
   GHOSTTY_REPO
   GHOSTTY_REF
   GHOSTTY_OPTIMIZE
+  GHOSTTY_XCFRAMEWORK_TARGET
   GHOSTTY_PATCH_DIR
 EOF
 }
@@ -114,6 +117,10 @@ while [[ $# -gt 0 ]]; do
       GHOSTTY_OPTIMIZE="$2"
       shift 2
       ;;
+    --xcframework-target)
+      GHOSTTY_XCFRAMEWORK_TARGET="$2"
+      shift 2
+      ;;
     --patch-dir)
       GHOSTTY_PATCH_DIR="$2"
       shift 2
@@ -130,6 +137,11 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+case "${GHOSTTY_XCFRAMEWORK_TARGET}" in
+  native|universal) ;;
+  *) echo "error: xcframework target must be native or universal" >&2; exit 1 ;;
+esac
+
 require_cmd git
 require_cmd zig
 
@@ -145,7 +157,7 @@ apply_patches
     -Demit-macos-app=false \
     -Demit-exe=false \
     -Doptimize="${GHOSTTY_OPTIMIZE}" \
-    -Dxcframework-target=universal
+    -Dxcframework-target="${GHOSTTY_XCFRAMEWORK_TARGET}"
 )
 
 "${REPO_ROOT}/scripts/install-ghosttykit.sh" "${GHOSTTY_DIR}/macos/GhosttyKit.xcframework"

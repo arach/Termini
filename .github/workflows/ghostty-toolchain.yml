@@ -1,0 +1,49 @@
+name: Ghostty compiler validation
+
+on:
+  pull_request:
+    paths:
+      - 'patches/ghostty/**'
+      - 'scripts/validate-ghostty-toolchain.sh'
+      - '.github/workflows/ghostty-toolchain.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  native:
+    runs-on: macos-15
+    timeout-minutes: 35
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: ghostty-org/ghostty
+          ref: 07d31666e73bce337b9cece60a884c67fe8906f4
+          path: build/ghostty
+          persist-credentials: false
+      - name: Install pinned Zig
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(uname -m)" = arm64
+          curl --fail --location --retry 3 --output "$RUNNER_TEMP/zig.tar.xz" \
+            https://ziglang.org/download/0.15.2/zig-aarch64-macos-0.15.2.tar.xz
+          echo "3cc2bab367e185cdfb27501c4b30b1b0653c28d9f73df8dc91488e66ece5fa6b  $RUNNER_TEMP/zig.tar.xz" | shasum -a 256 --check
+          tar -xf "$RUNNER_TEMP/zig.tar.xz" -C "$RUNNER_TEMP"
+          echo "$RUNNER_TEMP/zig-aarch64-macos-0.15.2" >> "$GITHUB_PATH"
+      - name: Validate stock compiler and build native engine
+        run: scripts/validate-ghostty-toolchain.sh build/ghostty build/evidence
+      - name: Upload compiler evidence and native framework
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ghostty-xcode26.3-zig0.15.2-arm64
+          path: build/evidence
+          if-no-files-found: error
+          retention-days: 14
