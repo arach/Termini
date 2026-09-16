@@ -1,0 +1,234 @@
+diff --git a/include/ghostty.h b/include/ghostty.h
+index dbd13cfef..cec277d7c 100644
+--- a/include/ghostty.h
++++ b/include/ghostty.h
+@@ -1110,6 +1110,28 @@ GHOSTTY_API ghostty_surface_config_s ghostty_surface_config_new();
+
+ GHOSTTY_API ghostty_surface_t ghostty_surface_new(ghostty_app_t,
+                                                      const ghostty_surface_config_s*);
++// Experimental macOS offscreen export constructor. Existing surface config ABI
++// is unchanged. The NSView is a geometry/platform anchor; no window is required.
++// encode_cb runs on a renderer thread after render encoders end, before commit.
++// texture and command_buffer are borrowed id<MTLTexture>/id<MTLCommandBuffer>.
++// Encode a GPU copy to an owned, bounded IOSurface pool and publish that buffer
++// only from a successful command completion handler. Never block, commit/wait,
++// call surface APIs, or modify the source texture from this callback. Skip the
++// copy when no frame credit is available. userdata must outlive surface_free.
++typedef struct {
++  void* userdata;
++  void (*encode_cb)(void* userdata, void* texture, void* command_buffer);
++  // Optional fast check before GPU encoding. Return false when the owned pool
++  // has no credit. Preserve dirty state until request_frame_export is called.
++  bool (*has_credit_cb)(void* userdata);
++} ghostty_frame_export_s;
++GHOSTTY_API ghostty_surface_t ghostty_surface_new_with_frame_export(
++    ghostty_app_t, const ghostty_surface_config_s*, const ghostty_frame_export_s*);
++
++// Call on the engine app thread after export credit returns. Schedules a
++// current-state frame even if the terminal became idle while exports were full.
++GHOSTTY_API void ghostty_surface_request_frame_export(ghostty_surface_t);
++
+ GHOSTTY_API void ghostty_surface_free(ghostty_surface_t);
+ GHOSTTY_API void* ghostty_surface_userdata(ghostty_surface_t);
+ GHOSTTY_API ghostty_app_t ghostty_surface_app(ghostty_surface_t);
+diff --git a/src/apprt/embedded.zig b/src/apprt/embedded.zig
+index 7fc979d03..93d14fb0b 100644
+--- a/src/apprt/embedded.zig
++++ b/src/apprt/embedded.zig
+@@ -244,12 +244,16 @@ pub const App = struct {
+
+     /// Create a new surface for the app.
+     fn newSurface(self: *App, opts: Surface.Options) !*Surface {
++        return self.newSurfaceWithFrameExport(opts, null);
++    }
++
++    fn newSurfaceWithFrameExport(self: *App, opts: Surface.Options, frame_export: ?Surface.FrameExport) !*Surface {
+         // Grab a surface allocation because we're going to need it.
+         var surface = try self.core_app.alloc.create(Surface);
+         errdefer self.core_app.alloc.destroy(surface);
+
+         // Create the surface
+-        try surface.init(self, opts);
++        try surface.initWithFrameExport(self, opts, frame_export);
+         errdefer surface.deinit();
+
+         return surface;
+@@ -412,6 +416,15 @@ pub const EnvVar = extern struct {
+ };
+
+ pub const Surface = struct {
++    /// Experimental macOS export hook. The callback may append commands to the
++    /// borrowed command buffer but may not commit, wait, or retain the source
++    /// texture past GPU completion. It must never wait for external consumers.
++    pub const FrameExport = extern struct {
++        userdata: ?*anyopaque,
++        encode: *const fn (?*anyopaque, ?*anyopaque, ?*anyopaque) callconv(.c) void,
++        has_credit: ?*const fn (?*anyopaque) callconv(.c) bool,
++    };
++    frame_export: ?FrameExport = null,
+     app: *App,
+     platform: Platform,
+     userdata: ?*anyopaque = null,
+@@ -469,8 +482,13 @@ pub const Surface = struct {
+     };
+
+     pub fn init(self: *Surface, app: *App, opts: Options) !void {
++        return self.initWithFrameExport(app, opts, null);
++    }
++
++    fn initWithFrameExport(self: *Surface, app: *App, opts: Options, frame_export: ?FrameExport) !void {
+         self.* = .{
+             .app = app,
++            .frame_export = frame_export,
+             .platform = try .init(opts.platform_tag, opts.platform),
+             .userdata = opts.userdata,
+             .core_surface = undefined,
+@@ -489,6 +507,9 @@ pub const Surface = struct {
+         // Shallow copy the config so that we can modify it.
+         var config = try apprt.surface.newConfig(app.core_app, &app.config, opts.context);
+         defer config.deinit();
++        // Remote presentation uses the renderer's event/timer scheduling, not
++        // a display link tied to a local window. No fake visible window needed.
++        if (frame_export != null) config.@"window-vsync" = false;
+
+         // If we have a working directory from the options then we set it.
+         if (opts.working_directory) |c_wd| {
+@@ -1563,6 +1584,30 @@ pub const CAPI = struct {
+         };
+     }
+
++    /// Separate constructor keeps the existing surface configuration ABI intact.
++    export fn ghostty_surface_new_with_frame_export(
++        app: *App,
++        opts: *const apprt.Surface.Options,
++        frame_export: *const Surface.FrameExport,
++    ) ?*Surface {
++        if (comptime builtin.os.tag != .macos) return null;
++        if (opts.platform_tag != @intFromEnum(PlatformTag.macos)) return null;
++        return app.newSurfaceWithFrameExport(opts.*, frame_export.*) catch |err| {
++            log.err("error initializing remote surface err={}", .{err});
++            return null;
++        };
++    }
++
++    export fn ghostty_surface_request_frame_export(surface: *Surface) void {
++        if (comptime builtin.os.tag != .macos) return;
++        if (surface.frame_export == null) return;
++        const core_renderer = &surface.core_surface.renderer;
++        core_renderer.draw_mutex.lock();
++        core_renderer.cells_rebuilt = true;
++        core_renderer.draw_mutex.unlock();
++        surface.refresh();
++    }
++
+     fn surface_new_(
+         app: *App,
+         opts: *const apprt.Surface.Options,
+diff --git a/src/renderer/Metal.zig b/src/renderer/Metal.zig
+index 6c7432d21..5c4b95022 100644
+--- a/src/renderer/Metal.zig
++++ b/src/renderer/Metal.zig
+@@ -39,6 +39,8 @@ pub const swap_chain_count = 3;
+ const log = std.log.scoped(.metal);
+
+ layer: IOSurfaceLayer,
++frame_export: ?apprt.embedded.Surface.FrameExport = null,
++remote_size: rendererpkg.ScreenSize = .{ .width = 0, .height = 0 },
+
+ /// MTLDevice
+ device: objc.Object,
+@@ -147,6 +149,8 @@ pub fn init(alloc: Allocator, opts: rendererpkg.Options) !Metal {
+
+     return .{
+         .layer = layer,
++        .frame_export = opts.rt_surface.frame_export,
++        .remote_size = .{ .width = opts.rt_surface.size.width, .height = opts.rt_surface.size.height },
+         .device = device,
+         .queue = queue,
+         .blending = opts.config.blending,
+@@ -162,6 +166,7 @@ pub fn deinit(self: *Metal) void {
+ }
+
+ pub fn loopEnter(self: *Metal) void {
++    if (self.frame_export != null) return;
+     const renderer: *align(1) Renderer = @fieldParentPtr("api", self);
+     self.layer.setDisplayCallback(
+         @ptrCast(&displayCallback),
+@@ -214,6 +219,9 @@ pub fn initShaders(
+
+ /// Get the current size of the runtime surface.
+ pub fn surfaceSize(self: *const Metal) !struct { width: u32, height: u32 } {
++    if (self.frame_export != null) {
++        return .{ .width = @min(self.remote_size.width, self.max_texture_size), .height = @min(self.remote_size.height, self.max_texture_size) };
++    }
+     const bounds = self.layer.layer.getProperty(graphics.Rect, "bounds");
+     const scale = self.layer.layer.getProperty(f64, "contentsScale");
+
+@@ -232,6 +240,19 @@ pub fn surfaceSize(self: *const Metal) !struct { width: u32, height: u32 } {
+     };
+ }
+
++// Called under the renderer draw mutex from its resize mailbox.
++pub fn setScreenSize(self: *Metal, size: rendererpkg.Size) void {
++    if (self.frame_export != null) self.remote_size = size.screen;
++}
++
++// Cheap host credit check before any GPU frame work. Keep pending dirty state
++// until the host requests another frame after returning a buffer credit.
++pub fn canDraw(self: *const Metal) bool {
++    const exporter = self.frame_export orelse return true;
++    const has_credit = exporter.has_credit orelse return true;
++    return has_credit(exporter.userdata);
++}
++
+ /// Initialize a new render target which can be presented by this API.
+ pub fn initTarget(self: *const Metal, width: usize, height: usize) !Target {
+     return Target.init(.{
+@@ -251,6 +272,7 @@ pub fn initTarget(self: *const Metal, width: usize, height: usize) !Target {
+
+ /// Present the provided target.
+ pub inline fn present(self: *Metal, target: Target, sync: bool) !void {
++    if (self.frame_export != null) return;
+     if (sync) {
+         self.layer.setSurfaceSync(target.surface);
+     } else {
+diff --git a/src/renderer/generic.zig b/src/renderer/generic.zig
+index 0f4a294bc..ba56e5b41 100644
+--- a/src/renderer/generic.zig
++++ b/src/renderer/generic.zig
+@@ -1487,6 +1487,9 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
+                 try self.api.presentLastTarget();
+                 return;
+             }
++            if (@hasDecl(GraphicsAPI, "canDraw")) {
++                if (!self.api.canDraw()) return;
++            }
+             self.cells_rebuilt = false;
+
+             // Wait for a frame to be available.
+@@ -1923,6 +1926,8 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
+             self.draw_mutex.lock();
+             defer self.draw_mutex.unlock();
+
++            if (@hasDecl(GraphicsAPI, "setScreenSize")) self.api.setScreenSize(size);
++
+             // We only actually need the padding from this,
+             // everything else is derived elsewhere.
+             self.size.padding = size.padding;
+diff --git a/src/renderer/metal/Frame.zig b/src/renderer/metal/Frame.zig
+index 388b4f9ed..368ceee76 100644
+--- a/src/renderer/metal/Frame.zig
++++ b/src/renderer/metal/Frame.zig
+@@ -106,6 +106,12 @@ pub inline fn renderPass(
+ ///
+ /// If `sync` is true, this will block until the frame is presented.
+ pub inline fn complete(self: *Self, sync: bool) void {
++    // Append an export copy after all terminal passes, before commit. Engine
++    // target reuse waits for this same command buffer, so the copy cannot race
++    // a subsequent frame. The host owns the destination pool and its leases.
++    if (self.block.renderer.api.frame_export) |exporter| {
++        exporter.encode(exporter.userdata, self.block.target.texture.value, self.buffer.value);
++    }
+     // If we don't need to complete synchronously,
+     // we add our block as a completion handler.
+     //
