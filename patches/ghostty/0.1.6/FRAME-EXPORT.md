@@ -57,8 +57,9 @@ The local 2026-09-16 proof used a private SDK overlay adding `arm64-macos` to
 `arm64e-macos` target groups in the libSystem text stub. Local evidence records
 the original stub hash and transformation. This enables a native diagnostic
 build; it is **not release-toolchain qualification**. Installed SDKs are unchanged;
-no modified SDK or generated binary is committed. Release needs a supported
-build toolchain and macOS/iOS regression checks.
+no modified SDK or generated binary is committed. The subsequent stock-toolchain
+validation below supersedes that overlay build for native arm64 evidence.
+Universal packaging and macOS/iOS release regressions remain open.
 
 Hudson's `Tools/TerminalIsolationProbe/run.ts --terminal` uses the built native
 XCFramework in an app-bundled XPC helper. It tests real PTY output/input, exported
@@ -72,3 +73,33 @@ The fixture asserts AppKit initialization runs on the actual main thread.
 Remaining product gates include input/IME/selection/accessibility, dynamic resize
 pool generations, lifecycle recovery, peer signing, multiple panes, a second
 consumer, and matched performance/soak tests. This does not enable Scout cutover.
+
+## Validated compiler baseline — 2026-09-16
+
+Use **Xcode 26.3 (17C529), its stock macOS 26.2 SDK, and Zig 0.15.2** for
+this pinned engine. Xcode 27 is not a project requirement. A fresh arm64 GitHub
+runner built the same source and patches without any SDK overlay:
+[successful compiler validation](https://github.com/arach/Termini/actions/runs/35129139473).
+Apple Metal reported version `32023.864`.
+
+The workflow `.github/workflows/ghostty-toolchain.yml` invokes
+`scripts/validate-ghostty-toolchain.sh` on a clean pinned checkout, verifies both
+new C exports, and retains the native framework plus toolchain/source/patch hashes.
+The Zig download has a fixed SHA-256. No engine build cache is restored.
+
+The exact downloaded library was verified by SHA-256 before linking into Hudson's
+local terminal helper. Its PTY/GPU fixture passed: 122 presentations, 8 completions
+within the 300 ms host-main-stall sample, continued parsing with all three credits
+held, immutable held frames, idle recovery, stale ACK rejection and PTY/helper
+cleanup. These are correctness checks, not a throughput comparison with the
+previous 121-frame run. The host fixture was compiled locally using the installed
+CLT and macOS 26.5 SDK, targeting macOS 14; the engine was compiled by the pinned
+Xcode 26.3 CI toolchain. This does not establish runtime compatibility on every
+supported macOS release.
+
+Native library SHA-256:
+`8e8c285383241c6c62b6d256f2771e300f7ffa09410fbfa1e129eacc387a3cb2`.
+
+This closes the stock compiler/SDK gate for **native macOS arm64 engine builds**.
+Intel, universal/iOS builds, full product integration, release signing and the
+wider OS/runtime regression matrix are not covered. No release binary pin changed.
