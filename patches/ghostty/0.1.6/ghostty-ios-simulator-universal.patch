@@ -44,7 +44,7 @@ index a19dd18af..3d67ac1a1 100644
 
      // Generate a headers directory with only ghostty.h and the module
      // map. We can't use include/ directly because it also contains the
-@@ -81,9 +98,9 @@ pub fn init(
+@@ -81,8 +98,8 @@ pub fn init(
                      .dsym = ios.dsym,
                  },
                  .{
